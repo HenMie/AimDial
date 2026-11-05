@@ -1,20 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  project,
-  clampPitch,
-  clampYaw,
-  wrapAngle,
-  isHit,
-  targetRadiusPx,
-  FOV_Y,
-} from '../lib/aimModel.js'
+import { project, clampPitch, clampYaw, isHit, targetRadiusPx, FOV_Y } from '../lib/aimModel.js'
 import {
   buildField,
   replaceTarget,
-  boardExtents,
-  boardAnchor,
+  fieldExtents,
   TARGETS_ON_FIELD,
-  FIELD_ANCHOR,
 } from '../lib/targets.js'
 import { summarize, meanOvershoot } from '../lib/scoring.js'
 import { degPerPointerUnit } from '../lib/sens.js'
@@ -26,34 +16,69 @@ import {
   roomSurfaces,
   pointOn,
   corners,
+  band,
+  boxFaces,
+  lightShaft,
+  toCamera,
+  projectCamera,
+  surface,
+  ROOM,
+  PROPS,
+  WALL_BANDS,
+  CHECKER_SIZE,
+  NEAR_Z,
 } from '../lib/room.js'
 
 // Sixshot rules: the clock is the only win condition. The field never empties.
 const ROUND_MS = 60_000
 const COUNTDOWN_MS = 3000
 
-// How long the field may sit entirely off screen before the view eases back.
-const OFFVIEW_RECENTER_MS = 900
 // One event this large is a pointer-lock warp or a driver spike, not a flick.
 // Raw counts are much finer-grained than CSS pixels, so this is generous.
 const MAX_MOVE_DELTA = 600
 
 // HUD refresh cadence — fast enough to feel live, slow enough to skip renders.
 const HUD_TICK_MS = 80
-const HIT_FLASH_MS = 150
-const RING_MS = 320
-const SPAWN_MS = 140
+const HIT_FLASH_MS = 120
+const RING_MS = 260
+const SPAWN_MS = 90
 
-// World size of one wall panel. Small, so the wall reads as a big surface seen
-// from a distance rather than a backdrop a step away.
-const GRID = 0.4
 const TAU = Math.PI * 2
+
+// Cell size for the floor and ceiling: see the note in drawRoom.
+const FLOOR_CELL = CHECKER_SIZE * 2
+
+// Palette traced off the footage. The range is a desaturated grey box lit from
+// one side, with the floor much brighter than the walls where the daylight
+// lands — that contrast, not a vignette, is what reads as "outdoors above".
+const COLORS = {
+  sky: ['#7fb0d8', '#c4dceb'],
+  // The range is lit, not moody: every surface is a mid-to-light grey and the
+  // contrast between the two checker tones is gentle. An earlier pass made the
+  // base colours dark and then laid a dark checker over them, which multiplied
+  // straight down to charcoal and read nothing like the footage.
+  ceiling: '#c3c6ca',
+  wallUpper: '#9b9ea2',
+  wallLower: '#a8abaf',
+  wallMoulding: '#7e8286',
+  sideWall: '#94979b',
+  floor: '#d6d7d2',
+  skirt: '#5e6266',
+  prop: '#b4b7bb',
+  propSide: '#a2a5a9',
+  // Checker overlays: the footage's pattern is barely there — two greys a few
+  // percent apart, read as texture rather than as a chessboard. Both tones sit
+  // on a lit base as a gentle modulation, not as a colour pair; a strong pair
+  // here turns the wall into a chessboard and pulls the eye off the balls.
+  checkerLight: 'rgba(255,255,255,0.13)',
+  checkerDark: 'rgba(96,102,108,0.1)',
+}
 
 /**
  * One static-clicking round (Sixshot-style) at a fixed sensitivity: six small
- * fixed-size targets sit on a plane in front of the player at all times, and each
- * kill is replaced immediately at a fresh spot on that same plane — the view is
- * never asked to turn around, only to flick.
+ * fixed-size targets sit on the range's back wall at all times, and each kill is
+ * replaced immediately elsewhere in the same wall patch — the view is never
+ * asked to turn around, only to flick.
  *
  * `sensitivity` is the game sensitivity for this round, and the view turns at
  * exactly the in-game rate for it, so a flick covers the same mouse distance it
@@ -74,6 +99,10 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
   const sizeRef = useRef({ w: 0, h: 0 })
   const idleField = useRef(null)
 
+  // The round's forward axis. The target field is fixed to the wall around it,
+  // so respawns do not depend on where the player last flicked.
+  const origin = useRef({ yaw: 0, pitch: 0 })
+
   // Degrees the view turns per unit of reported pointer movement. Pointer Lock
   // under `unadjustedMovement` reports raw device counts — the same unit the
   // game reads — so the gain is the game's yaw constant and nothing more.
@@ -86,7 +115,7 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
   const degPerUnit = degPerPointerUnit(sensitivity)
 
   if (!idleField.current) {
-    idleField.current = buildField(FIELD_ANCHOR ?? { yaw: 0, pitch: 0 }, TARGETS_ON_FIELD, Math.random)
+    idleField.current = buildField({ yaw: 0, pitch: 0 }, TARGETS_ON_FIELD, Math.random)
   }
 
   const setPhaseSafe = useCallback((next) => {
@@ -99,15 +128,16 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
     if (!stage) return
     const rect = stage.getBoundingClientRect()
     const cam = { yaw: 0, pitch: 0 }
-    const extents = boardExtents(FOV_Y)
+    const extents = fieldExtents()
     const now = performance.now()
+    origin.current = { yaw: 0, pitch: 0 }
 
     sim.current = {
       cam,
       width: rect.width,
       height: rect.height,
       extents,
-      targets: buildField(FIELD_ANCHOR ?? { yaw: 0, pitch: 0 }, TARGETS_ON_FIELD, Math.random, extents).map((t) => ({
+      targets: buildField(origin.current, TARGETS_ON_FIELD, Math.random, extents).map((t) => ({
         ...t,
         bornAt: now,
       })),
@@ -118,7 +148,6 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
       runningSince: 0,
       countdownStart: now,
       overshoots: [],
-      offViewSince: 0,
       effects: [],
       hitAt: 0,
       finished: false,
@@ -233,11 +262,10 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
           at: now,
           seed: Math.random() * TAU,
         })
-        // Replace the killed ball so the field stays at six. Sixshot's board
-        // rides with the view, so the replacement is anchored to the live
-        // camera, not to where the round began.
-        const anchor = FIELD_ANCHOR ?? boardAnchor(s.cam)
-        s.targets = replaceTarget(s.targets, bestIndex, anchor, Math.random, s.extents).map(
+        // Replace the killed ball so the field stays at six. The patch is fixed
+        // to the wall, so the replacement lands near the others rather than at
+        // wherever the player happens to be looking.
+        s.targets = replaceTarget(s.targets, bestIndex, origin.current, Math.random, s.extents).map(
           (t) => ({ ...t, bornAt: t.bornAt ?? now }),
         )
       }
@@ -302,12 +330,9 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
           const elapsed = s.elapsed + (now - s.runningSince)
           if (elapsed >= ROUND_MS) {
             finishRound()
-          } else {
-            driftTargetIntoView(s, now)
-            if (now - lastHud >= HUD_TICK_MS) {
-              lastHud = now
-              publishHud(s, elapsed)
-            }
+          } else if (now - lastHud >= HUD_TICK_MS) {
+            lastHud = now
+            publishHud(s, elapsed)
           }
         }
       }
@@ -352,9 +377,7 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
             <span style={{ width: `${leftFrac * 100}%` }} data-low={hud.left < 10_000} />
           </div>
           <div className="hud-score">{Math.round(hud.score)}</div>
-          {hud.shots > 0 && (
-            <div className="hud-acc">{Math.round(hud.acc * 100)}%</div>
-          )}
+          {hud.shots > 0 && <div className="hud-acc">{Math.round(hud.acc * 100)}%</div>}
         </div>
       )}
 
@@ -426,22 +449,26 @@ function renderScene(ctx, { sim, idle, phase, countdownLeft, w, h, now }) {
 
   const cam = sim ? sim.cam : IDLE_CAM
 
-  // Backdrop for anything the room does not cover (a steep look up or down).
-  ctx.fillStyle = '#3a3c40'
-  ctx.fillRect(0, 0, w, h)
+  // The range is static geometry, so it is rendered into an offscreen layer and
+  // only re-rendered when the camera moves enough to matter. Repainting ~3,000
+  // checker cells every frame set the frame time at seconds, not milliseconds;
+  // quantizing the camera to a fraction of a degree makes a still or slow-turning
+  // view free, and a fast flick costs one background rebuild per step.
+  drawCachedBackground(ctx, w, h, cam)
 
-  drawRoom(ctx, w, h, cam)
-  drawVignette(ctx, w, h)
+  // Balls go in after the room but before the vignette, so they sit on the wall
+  // rather than floating over a darkened frame edge.
+  const targets =
+    phase === 'idle' ? idle : sim && (phase === 'countdown' || phase === 'running') ? sim.targets : null
 
-  if (phase === 'idle') {
-    drawTargets(ctx, cam, idle, w, h, now, 0.85)
-  } else if (sim) {
-    if (phase !== 'finished') {
-      drawTargets(ctx, sim.cam, sim.targets, w, h, now, 1)
-      drawEffects(ctx, sim, now)
-    }
+  drawTargets(ctx, cam, targets, w, h, now, phase === 'idle' ? 0.9 : 1)
+  if (sim && phase === 'running') drawEffects(ctx, sim, now)
+
+  if (sim) {
     const flash = sim.hitAt ? Math.max(0, 1 - (now - sim.hitAt) / HIT_FLASH_MS) : 0
-    drawCrosshair(ctx, w / 2, h / 2, flash, h)
+    drawCrosshair(ctx, w / 2, h / 2, flash, h, phase === 'running' || phase === 'idle')
+  } else {
+    drawCrosshair(ctx, w / 2, h / 2, 0, h, phase === 'idle')
   }
 
   if (phase === 'countdown') {
@@ -449,41 +476,165 @@ function renderScene(ctx, { sim, idle, phase, countdownLeft, w, h, now }) {
   }
 }
 
+// Background cache. `step` is roughly a third of a degree: a 1080p frame is
+// about 26 px/degree, so a step moves the image under 9 px — and the cache is
+// rebuilt the moment the camera moves past it, so the error never accumulates.
+const BG_STEP = (0.35 * Math.PI) / 180
+const bgCache = { canvas: null, w: 0, h: 0, yaw: NaN, pitch: NaN, dpr: 1 }
+
+function drawCachedBackground(ctx, w, h, cam) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  const yawQ = Math.round(cam.yaw / BG_STEP) * BG_STEP
+  const pitchQ = Math.round(cam.pitch / BG_STEP) * BG_STEP
+
+  const stale =
+    !bgCache.canvas ||
+    bgCache.w !== w ||
+    bgCache.h !== h ||
+    bgCache.dpr !== dpr ||
+    bgCache.yaw !== yawQ ||
+    bgCache.pitch !== pitchQ
+
+  if (stale) {
+    if (!bgCache.canvas) bgCache.canvas = document.createElement('canvas')
+    const c = bgCache.canvas
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+      c.width = Math.round(w * dpr)
+      c.height = Math.round(h * dpr)
+    }
+    const bctx = c.getContext('2d')
+    bctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    bctx.clearRect(0, 0, w, h)
+    drawRoom(bctx, w, h, { yaw: yawQ, pitch: pitchQ })
+
+    bgCache.w = w
+    bgCache.h = h
+    bgCache.dpr = dpr
+    bgCache.yaw = yawQ
+    bgCache.pitch = pitchQ
+  }
+
+  ctx.drawImage(bgCache.canvas, 0, 0, w, h)
+}
+
 const IDLE_CAM = { yaw: 0, pitch: 0 }
 
+/**
+ * Draw the range. Surfaces go back-to-front so overdraw stays bounded: sky,
+ * then the room's six planes, then the props, then the balls sitting on the wall
+ * behind everything.
+ */
 function drawRoom(ctx, w, h, cam) {
   const focal = focalFor(h)
   const room = roomSurfaces()
 
-  // Sixshot's arena is a lit grey box, not a void: a bright floor, mid-grey
-  // walls, a darker ceiling. The tonal difference between the three surfaces is
-  // what makes the wall read as a distant plane instead of a backdrop.
-  fillSurface(ctx, room.ceiling, cam, w, h, focal, '#6a6c70')
-  fillSurface(ctx, room.left, cam, w, h, focal, '#696b6f')
-  fillSurface(ctx, room.right, cam, w, h, focal, '#696b6f')
-  fillSurface(ctx, room.back, cam, w, h, focal, '#74767a')
-  fillSurface(ctx, room.floor, cam, w, h, focal, '#97999c')
+  // Sky: a flat gradient above the roof lip. Drawn first, so anything the room
+  // covers simply hides it.
+  drawSky(ctx, w, h)
 
-  // Light falls off toward the ceiling, which also keeps the top HUD readable.
-  const shade = ctx.createLinearGradient(0, 0, 0, h * 0.42)
-  shade.addColorStop(0, 'rgba(8,10,13,0.14)')
-  shade.addColorStop(1, 'rgba(8,10,13,0)')
-  ctx.fillStyle = shade
-  ctx.fillRect(0, 0, w, h * 0.42)
+  // Floor, before the walls: its checkers are the brightest thing in frame and
+  // they run under the wall's base, so the skirt line reads as a shadow.
+  //
+  // Floor and ceiling use a coarser cell than the walls. Perspective already
+  // magnifies the near floor enormously, so a wall-sized cell there would be a
+  // few dozen huge quads at the bottom of the frame and thousands of slivers at
+  // the horizon; doubling the cell halves the quad count on the two largest
+  // surfaces without changing how the texture reads.
+  fillSurface(ctx, room.floor, cam, w, h, focal, COLORS.floor)
+  drawChecker(ctx, room.floor, cam, w, h, focal, {
+    a: COLORS.checkerLight,
+    b: COLORS.checkerDark,
+  }, FLOOR_CELL)
+  drawLightShaft(ctx, cam, w, h, focal)
 
-  ctx.lineWidth = 1
-  drawGrid(ctx, room.back, cam, w, h, focal, 'rgba(24,28,33,0.07)', 'rgba(24,28,33,0.115)')
-  drawGrid(ctx, room.left, cam, w, h, focal, 'rgba(24,28,33,0.06)', 'rgba(24,28,33,0.1)')
-  drawGrid(ctx, room.right, cam, w, h, focal, 'rgba(24,28,33,0.06)', 'rgba(24,28,33,0.1)')
-  drawGrid(ctx, room.floor, cam, w, h, focal, 'rgba(24,28,33,0.075)', 'rgba(24,28,33,0.125)')
-
-  // Skirting around the base of the room anchors the corner.
-  ctx.strokeStyle = 'rgba(20,24,29,0.16)'
-  ctx.beginPath()
-  const base = corners(room.floor)
-  for (let i = 0; i < base.length; i += 1) {
-    segment(ctx, base[i], base[(i + 1) % base.length], cam, w, h, focal)
+  // Side walls, then the back wall: the back wall is the far surface, so it is
+  // painted after the sides to win the pixels along the corner seam.
+  for (const side of ['left', 'right']) {
+    fillSurface(ctx, room[side], cam, w, h, focal, COLORS.sideWall)
+    drawChecker(ctx, room[side], cam, w, h, focal, {
+      a: COLORS.checkerLight,
+      b: COLORS.checkerDark,
+    })
+    drawWallBase(ctx, room[side], cam, w, h, focal)
   }
+
+  // Back wall, in its three bands.
+  const back = room.back
+  const upper = band(back, WALL_BANDS.upper[0], WALL_BANDS.upper[1])
+  const moulding = band(back, WALL_BANDS.moulding[0], WALL_BANDS.moulding[1])
+  const lower = band(back, WALL_BANDS.lower[0], WALL_BANDS.lower[1])
+
+  fillSurface(ctx, lower, cam, w, h, focal, COLORS.wallLower)
+  drawChecker(ctx, lower, cam, w, h, focal, {
+    a: COLORS.checkerLight,
+    b: COLORS.checkerDark,
+  })
+  fillSurface(ctx, moulding, cam, w, h, focal, COLORS.wallMoulding)
+  fillSurface(ctx, upper, cam, w, h, focal, COLORS.wallUpper)
+  drawChecker(ctx, upper, cam, w, h, focal, {
+    a: COLORS.checkerLight,
+    b: COLORS.checkerDark,
+  })
+
+  // A hairline under the moulding sells it as a projecting lip rather than a
+  // colour change on one flat plane.
+  ctx.strokeStyle = 'rgba(40,46,52,0.3)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  edgeLine(ctx, back, WALL_BANDS.moulding[0], cam, w, h, focal)
+  ctx.stroke()
+
+  drawProps(ctx, cam, w, h, focal)
+
+  // Roof last among the room planes: it hangs over the wall tops, and its lip
+  // against the sky is the line the player sees when looking up.
+  drawRoof(ctx, room.ceiling, cam, w, h, focal)
+
+  drawVignette(ctx, w, h)
+}
+
+function drawSky(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h * 0.5)
+  g.addColorStop(0, COLORS.sky[0])
+  g.addColorStop(1, COLORS.sky[1])
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, w, h * 0.55)
+}
+
+/**
+ * The roof slab.
+ *
+ * With the camera at eye level in a normal-height room, the roof's underside
+ * covers the entire upper half of the frame — its near edge projects far above
+ * the top and its far edge meets the back wall's top. So there is no gap for sky
+ * to show through from a level view; sky is only revealed by looking up past the
+ * roof's near edge, which the pitch clamp prevents.
+ *
+ * An earlier version cut the roof short of the back wall to expose a strip of
+ * sky, which from a level view produced a blue band straight across the frame —
+ * the projected gap landed on screen as a stripe rather than as depth.
+ */
+function drawRoof(ctx, surf, cam, w, h, focal) {
+  fillSurface(ctx, surf, cam, w, h, focal, COLORS.ceiling)
+  drawChecker(ctx, surf, cam, w, h, focal, {
+    a: COLORS.checkerLight,
+    b: COLORS.checkerDark,
+  }, FLOOR_CELL)
+
+  // A soft contact shadow where the roof meets the back wall, so the corner
+  // reads as a real edge instead of two coplanar greys meeting in a line.
+  ctx.strokeStyle = 'rgba(70,76,82,0.35)'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  segment(
+    ctx,
+    { x: -ROOM.halfX, y: ROOM.ceilY, z: ROOM.backZ },
+    { x: ROOM.halfX, y: ROOM.ceilY, z: ROOM.backZ },
+    cam,
+    w,
+    h,
+    focal,
+  )
   ctx.stroke()
 }
 
@@ -497,25 +648,198 @@ function fillSurface(ctx, surf, cam, w, h, focal, fill) {
   ctx.fill()
 }
 
-function drawGrid(ctx, surf, cam, w, h, focal, minor, major) {
-  const uN = Math.max(1, Math.round(surf.uLen / GRID))
-  const vN = Math.max(1, Math.round(surf.vLen / GRID))
+/**
+ * World-space checkerboard on a surface.
+ *
+ * This is the piece that makes the range read as a room instead of a backdrop:
+ * cells are sized in world units, so their on-screen size falls off with depth
+ * and they shear correctly along a side wall. A screen-space pattern would stay
+ * the same size however far away the wall was, and the brain reads that as a
+ * flat picture.
+ *
+ * Performance is the whole story here, and it is why the loop looks the way it
+ * does. Rotating every cell's corners into camera space is eight trig calls per
+ * cell, and at ~11,000 cells that alone ran a frame in 16 seconds. Camera space
+ * is linear, so the surface is rotated once and each cell's corners come from
+ * interpolating between the rotated surface corners — no trig per cell.
+ *
+ * A tiled-texture version was also tried and abandoned: canvas has no
+ * perspective-correct drawImage, and driving a per-triangle affine warp through
+ * pattern.setTransform never produced a frame at all.
+ */
+function drawChecker(ctx, surf, cam, w, h, focal, colors, cell = CHECKER_SIZE) {
+  const uN = Math.max(1, Math.round(surf.uLen / cell))
+  const vN = Math.max(1, Math.round(surf.vLen / cell))
 
-  for (const isMajor of [false, true]) {
-    ctx.strokeStyle = isMajor ? major : minor
+  // Rotate the surface's four corners into camera space once. Because the
+  // rotation is linear in the corner positions, camera-space (s,t) is a bilinear
+  // blend of these, so every cell below is pure arithmetic.
+  const c00 = toCamera(pointOn(surf, 0, 0), cam)
+  const c10 = toCamera(pointOn(surf, 1, 0), cam)
+  const c01 = toCamera(pointOn(surf, 0, 1), cam)
+  const c11 = toCamera(pointOn(surf, 1, 1), cam)
+
+  const buf = scratch
+  for (const parity of [0, 1]) {
     ctx.beginPath()
-    for (let i = 0; i <= uN; i += 1) {
-      if ((i % 5 === 0) !== isMajor) continue
-      const s = i / uN
-      segment(ctx, pointOn(surf, s, 0), pointOn(surf, s, 1), cam, w, h, focal)
+    for (let j = 0; j < vN; j += 1) {
+      const t0 = j / vN
+      const t1 = (j + 1) / vN
+      for (let i = 0; i < uN; i += 1) {
+        if ((i + j) % 2 !== parity) continue
+        const s0 = i / uN
+        const s1 = (i + 1) / uN
+        addCell(cam, w, h, focal, buf, c00, c10, c01, c11, s0, t0, s1, t1)
+        if (buf.count < 3) continue
+        for (let k = 0; k < buf.count; k += 1) {
+          const q = buf.pts[k]
+          if (k === 0) ctx.moveTo(q.x, q.y)
+          else ctx.lineTo(q.x, q.y)
+        }
+        ctx.closePath()
+      }
     }
-    for (let j = 0; j <= vN; j += 1) {
-      if ((j % 5 === 0) !== isMajor) continue
-      const t = j / vN
-      segment(ctx, pointOn(surf, 0, t), pointOn(surf, 1, t), cam, w, h, focal)
-    }
-    ctx.stroke()
+    ctx.fillStyle = parity === 0 ? colors.a : colors.b
+    ctx.fill()
   }
+}
+
+// Reused across cells so a frame allocates no per-cell arrays.
+const scratch = { pts: Array.from({ length: 8 }, () => ({ x: 0, y: 0, z: 0 })), count: 0 }
+
+/**
+ * Project one cell of a surface and write its clipped outline into `buf`.
+ *
+ * Camera-space corners are bilinear blends of the surface's four rotated
+ * corners. Every corner is in front of the near plane for the surfaces this room
+ * has when the camera is inside it, so the common path is a plain projection
+ * with no clipping; the near-plane case is handled by the room's geometry rather
+ * than per cell.
+ */
+function addCell(cam, w, h, focal, buf, c00, c10, c01, c11, s0, t0, s1, t1) {
+  buf.count = 0
+  const cx = w / 2
+  const cy = h / 2
+
+  // Four corners in (s,t) order: (s0,t0) (s1,t0) (s1,t1) (s0,t1).
+  const coords = [
+    [s0, t0],
+    [s1, t0],
+    [s1, t1],
+    [s0, t1],
+  ]
+
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+
+  for (let i = 0; i < 4; i += 1) {
+    const [s, t] = coords[i]
+    const p = buf.pts[i]
+    p.x = blend(c00.x, c10.x, c01.x, c11.x, s, t)
+    p.y = blend(c00.y, c10.y, c01.y, c11.y, s, t)
+    p.z = blend(c00.z, c10.z, c01.z, c11.z, s, t)
+    if (p.z < NEAR_Z) return
+    const sx = cx + (p.x / p.z) * focal
+    const sy = cy - (p.y / p.z) * focal
+    p.x = sx
+    p.y = sy
+    if (sx < minX) minX = sx
+    if (sx > maxX) maxX = sx
+    if (sy < minY) minY = sy
+    if (sy > maxY) maxY = sy
+  }
+
+  // Wholly off screen: the cheapest possible rejection, and the common case for
+  // every surface except the one being looked at.
+  if (maxX < 0 || minX > w || maxY < 0 || minY > h) return
+
+  buf.count = 4
+}
+
+/** Bilinear blend of a surface-corner attribute at surface coords (s, t). */
+function blend(a00, a10, a01, a11, s, t) {
+  return a00 * (1 - s) * (1 - t) + a10 * s * (1 - t) + a01 * (1 - s) * t + a11 * s * t
+}
+
+function edgeLine(ctx, surf, y, cam, w, h, focal, tOverride = null) {
+  const t = tOverride ?? (y - surf.o.y) / surf.v.y
+  segment(ctx, pointOn(surf, 0, t), pointOn(surf, 1, t), cam, w, h, focal)
+}
+
+/** Darker skirt where a side wall meets the floor. */
+function drawWallBase(ctx, surf, cam, w, h, focal) {
+  const strip = band(surf, ROOM.floorY, ROOM.floorY + 0.45)
+  fillSurface(ctx, strip, cam, w, h, focal, 'rgba(52,58,64,0.28)')
+}
+
+/**
+ * The daylight on the floor. A soft white wash inside a hard-edged shaft, plus a
+ * second, dimmer bounce rectangle offset inside it — the footage shows the light
+ * falling off rather than a uniform patch.
+ */
+function drawLightShaft(ctx, cam, w, h, focal) {
+  const poly = projectPolygon(lightShaft(), cam, w, h, focal)
+  if (!poly) return
+
+  ctx.save()
+  ctx.beginPath()
+  poly.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.closePath()
+  ctx.clip()
+
+  // The lit floor is brighter than bare floor but not white: it is a wash over
+  // the same checker, and letting the checker show through is what makes the
+  // light sit on a surface.
+  const grad = ctx.createLinearGradient(0, h * 0.45, 0, h)
+  grad.addColorStop(0, 'rgba(246,246,238,0.62)')
+  grad.addColorStop(1, 'rgba(246,246,238,0.3)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, w, h)
+  ctx.restore()
+}
+
+function drawProps(ctx, cam, w, h, focal) {
+  const boxes = [...PROPS.cornerBlocks, ...PROPS.pilasters]
+  // Sort by distance from the camera so near blocks overlap far ones.
+  const withDepth = boxes
+    .map((b) => {
+      const c = {
+        x: (b.min.x + b.max.x) / 2,
+        y: (b.min.y + b.max.y) / 2,
+        z: (b.min.z + b.max.z) / 2,
+      }
+      return { b, z: toCamera(c, cam).z }
+    })
+    .sort((a, b) => b.z - a.z)
+
+  for (const { b, z } of withDepth) {
+    if (z < NEAR_Z) continue
+    const faces = boxFaces(b.min, b.max)
+    // Order the faces far to near for this box.
+    const order = ['back', 'left', 'right', 'top', 'front']
+    const sorted = order
+      .map((k) => ({ k, f: faces[k] }))
+      .sort((p, q) => faceDepth(q.f) - faceDepth(p.f))
+    for (const { k, f } of sorted) {
+      const shade = k === 'top' ? COLORS.prop : k === 'front' ? COLORS.propSide : COLORS.propSide
+      fillSurface(ctx, f, cam, w, h, focal, shade)
+      drawChecker(ctx, f, cam, w, h, focal, {
+        a: COLORS.checkerLight,
+        b: COLORS.checkerDark,
+      })
+    }
+  }
+}
+
+function faceDepth(f) {
+  const c = {
+    x: f.o.x + f.u.x / 2 + f.v.x / 2,
+    y: f.o.y + f.u.y / 2 + f.v.y / 2,
+    z: f.o.z + f.u.z / 2 + f.v.z / 2,
+  }
+  return c.z
 }
 
 function segment(ctx, a, b, cam, w, h, focal) {
@@ -529,74 +853,79 @@ function drawVignette(ctx, w, h) {
   const g = ctx.createRadialGradient(
     w / 2,
     h / 2,
-    Math.min(w, h) * 0.34,
+    Math.min(w, h) * 0.46,
     w / 2,
     h / 2,
-    Math.max(w, h) * 0.76,
+    Math.max(w, h) * 0.8,
   )
   g.addColorStop(0, 'rgba(0,0,0,0)')
-  g.addColorStop(1, 'rgba(0,0,0,0.22)')
+  g.addColorStop(1, 'rgba(0,0,0,0.1)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, w, h)
 }
 
 let sphereSprite = null
 
-/** One shaded sphere, drawn once and blitted — cheaper than six gradients a frame. */
+/**
+ * One shaded sphere, drawn once and blitted — cheaper than six gradients a frame.
+ *
+ * The footage's target is nearly flat: a cyan ball with a small darker rim and a
+ * faint highlight, no bloom. An earlier version carried a wide glow, which read
+ * as "target is closer than the wall" and made the ball look bigger than it was.
+ */
 function getSphere() {
   if (sphereSprite) return sphereSprite
-  const size = 256
+  const size = 128
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
   const cx = size / 2
   const cy = size / 2
-  const r = size * 0.34
+  const r = size * 0.42
 
-  const glow = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, size / 2)
-  glow.addColorStop(0, 'rgba(96,222,242,0.26)')
-  glow.addColorStop(1, 'rgba(96,222,242,0)')
-  ctx.fillStyle = glow
-  ctx.fillRect(0, 0, size, size)
-
-  // Cyan, like Sixshot's default target colour: it separates from a grey wall
-  // without the bloom that makes a white ball look like it is right in front.
-  const body = ctx.createRadialGradient(cx - r * 0.32, cy - r * 0.4, r * 0.06, cx, cy, r * 1.04)
-  body.addColorStop(0, '#d8faff')
-  body.addColorStop(0.32, '#8ce6f4')
-  body.addColorStop(0.72, '#38bfd6')
-  body.addColorStop(1, '#12707f')
+  const body = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r)
+  body.addColorStop(0, '#7ff3f5')
+  body.addColorStop(0.55, '#2fd8e2')
+  body.addColorStop(1, '#0f8fa2')
   ctx.fillStyle = body
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, TAU)
   ctx.fill()
+
+  // A one-pixel dark edge keeps the ball distinct against the pale floor when
+  // it drifts down the wall.
+  ctx.strokeStyle = 'rgba(6,52,60,0.55)'
+  ctx.lineWidth = size * 0.035
+  ctx.beginPath()
+  ctx.arc(cx, cy, r - ctx.lineWidth / 2, 0, TAU)
+  ctx.stroke()
 
   sphereSprite = canvas
   return canvas
 }
 
 function drawTargets(ctx, cam, targets, w, h, now, alpha) {
+  if (!targets) return
   const sprite = getSphere()
   const radius = targetRadiusPx(w, h)
-  // The sprite's sphere occupies 34% of its edge; scale so the drawn sphere
-  // lands exactly on `radius` regardless of the glow margin around it.
-  const scale = 1 / 0.34
+  // The sprite's sphere occupies 84% of its edge; scale so the drawn sphere
+  // lands exactly on `radius`.
+  const scale = 1 / 0.84
 
   for (const target of targets) {
     const p = project(target, cam, w, h)
-    // Targets outside the view are simply not drawn; with six on the field the
+    // Targets outside the view are simply not drawn; with six in the field the
     // player always has something to shoot at.
     if (!p) continue
     if (p.x < -radius * 3 || p.x > w + radius * 3) continue
     if (p.y < -radius * 3 || p.y > h + radius * 3) continue
 
     const age = now - (target.bornAt ?? 0)
-    const grow = age < SPAWN_MS ? 0.72 + 0.28 * easeOut(age / SPAWN_MS) : 1
-    const fade = age < SPAWN_MS ? 0.4 + 0.6 * (age / SPAWN_MS) : 1
-    const d = radius * grow * scale
+    const grow = age < SPAWN_MS ? 0.55 + 0.45 * easeOut(age / SPAWN_MS) : 1
+    const d = radius * 2 * grow * scale
 
-    ctx.globalAlpha = alpha * fade
+    ctx.globalAlpha = alpha
     ctx.drawImage(sprite, p.x - d / 2, p.y - d / 2, d, d)
   }
   ctx.globalAlpha = 1
@@ -610,34 +939,24 @@ function drawEffects(ctx, sim, now) {
     const t = (now - e.at) / RING_MS
     const out = easeOut(t)
 
-    // A short flash sells the pop now that the target itself is gone.
-    ctx.globalAlpha = (1 - t) * 0.4
+    ctx.globalAlpha = (1 - t) * 0.32
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
-    ctx.arc(e.x, e.y, e.r * (0.7 + 0.8 * out), 0, TAU)
+    ctx.arc(e.x, e.y, e.r * (0.7 + 0.9 * out), 0, TAU)
     ctx.fill()
 
-    ctx.globalAlpha = (1 - t) * 0.85
-    ctx.strokeStyle = '#ffffff'
-    ctx.lineWidth = 2.6 * (1 - t) + 0.5
+    ctx.globalAlpha = (1 - t) * 0.8
+    ctx.strokeStyle = '#9ff4f8'
+    ctx.lineWidth = 2.2 * (1 - t) + 0.4
     ctx.beginPath()
-    ctx.arc(e.x, e.y, e.r * (0.9 + 2.1 * out), 0, TAU)
+    ctx.arc(e.x, e.y, e.r * (0.8 + 2 * out), 0, TAU)
     ctx.stroke()
-
-    ctx.globalAlpha = (1 - t) * 0.75
-    ctx.fillStyle = '#ffffff'
-    const spread = e.r * (0.5 + 2.4 * out)
-    for (let i = 0; i < 5; i += 1) {
-      const a = e.seed + (i * TAU) / 5
-      ctx.beginPath()
-      ctx.arc(e.x + Math.cos(a) * spread, e.y + Math.sin(a) * spread, 1.7 * (1 - t) + 0.6, 0, TAU)
-      ctx.fill()
-    }
   }
   ctx.globalAlpha = 1
 }
 
-function drawCrosshair(ctx, cx, cy, flash, h) {
+function drawCrosshair(ctx, cx, cy, flash, h, visible) {
+  if (!visible) return
   // Scaled off the frame so the reticle keeps Sixshot's proportions — smaller
   // than the ball it is aiming at, not a HUD-sized cross.
   const k = Math.max(0.7, Math.min(1.8, h / 900))
@@ -675,8 +994,6 @@ function drawCrosshair(ctx, cx, cy, flash, h) {
     ctx.lineCap = 'round'
     const inner = (4 + (1 - flash) * 3) * k
     const outer = inner + 6 * k
-    // Same dark underlay as the crosshair: a bare white tick disappears against
-    // the lit wall the moment it fires.
     for (const [color, width] of [
       [`rgba(6,10,14,${0.5 * flash})`, 3.4 * k],
       [`rgba(255,255,255,${0.95 * flash})`, 1.6 * k],
@@ -699,7 +1016,7 @@ function drawCrosshair(ctx, cx, cy, flash, h) {
 }
 
 function drawCountdown(ctx, w, h, remaining) {
-  ctx.fillStyle = 'rgba(5,8,12,0.62)'
+  ctx.fillStyle = 'rgba(5,8,12,0.5)'
   ctx.fillRect(0, 0, w, h)
 
   const size = Math.round(Math.min(w, h) * 0.17)
@@ -726,49 +1043,6 @@ function drawCountdown(ctx, w, h, remaining) {
   // 'middle' rides high because the em box carries more space above than below.
   ctx.textBaseline = 'alphabetic'
   ctx.fillText(String(n), cx, cy + size * 0.355)
-}
-
-/**
- * If every target has left the screen, ease the camera back toward the nearest
- * one. The field itself is anchored to a fixed plane, so this only fires after a
- * wild flick — the player is never stranded on an empty wall.
- */
-function driftTargetIntoView(sim, now) {
-  if (!sim.targets.length) return
-
-  const margin = 40
-  const inView = sim.targets.some((t) => {
-    const p = project(t, sim.cam, sim.width, sim.height)
-    if (!p) return false
-    return (
-      p.x > -margin && p.x < sim.width + margin && p.y > -margin && p.y < sim.height + margin
-    )
-  })
-  if (inView) {
-    sim.offViewSince = 0
-    return
-  }
-  if (!sim.offViewSince) {
-    sim.offViewSince = now
-    return
-  }
-  if (now - sim.offViewSince < OFFVIEW_RECENTER_MS) return
-
-  // Head for whichever target is angularly closest to where we are looking.
-  let nearest = sim.targets[0]
-  let nearestDist = Infinity
-  for (const t of sim.targets) {
-    const d = Math.hypot(wrapAngle(t.yaw - sim.cam.yaw), t.pitch - sim.cam.pitch)
-    if (d < nearestDist) {
-      nearestDist = d
-      nearest = t
-    }
-  }
-
-  const dYaw = wrapAngle(nearest.yaw - sim.cam.yaw)
-  const dPitch = nearest.pitch - sim.cam.pitch
-  sim.cam.yaw = clampYaw(sim.cam.yaw + dYaw * 0.12)
-  sim.cam.pitch = clampPitch(sim.cam.pitch + dPitch * 0.12)
 }
 
 function easeOut(t) {

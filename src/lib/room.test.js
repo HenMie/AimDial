@@ -9,10 +9,12 @@ import {
   roomSurfaces,
   corners,
   ROOM,
+  PROPS,
+  WALL_BANDS,
   NEAR_Z,
 } from './room.js'
-import { project, YAW_LIMIT, PITCH_LIMIT } from './aimModel.js'
-import { BOARD_HALF_YAW_DEG, BOARD_HALF_PITCH_DEG } from './targets.js'
+import { project, YAW_LIMIT, PITCH_LIMIT, FOV_Y } from './aimModel.js'
+import { FIELD_HALF_YAW_DEG, FIELD_HALF_PITCH_DEG, FIELD_PITCH_CENTRE_DEG } from './targets.js'
 
 const W = 1280
 const H = 720
@@ -185,22 +187,102 @@ describe('room', () => {
   })
 })
 
-describe('room holds the whole target board', () => {
-  // Balls sit up to BOARD_HALF off the board centre, and the board travels with
-  // the view. If the wall does not cover YAW_LIMIT + BOARD_HALF, a long sweep
-  // leaves balls hanging in empty space — that is the "球飞到页面外" bug.
+describe('room proportions', () => {
+  // The ceiling and floor have to land inside the frame. An earlier build put
+  // the ceiling at y=9, which is 48° up — past the 35° half-screen — so the roof
+  // never appeared and the range read as one flat wall. These assertions are what
+  // stop that from silently coming back.
+  const halfScreenDeg = (Math.atan(H / 2 / FOCAL) * 180) / Math.PI
+  const angleDeg = (y) => (Math.atan(Math.abs(y) / ROOM.backZ) * 180) / Math.PI
+
+  it('keeps the ceiling inside the top of the frame', () => {
+    expect(angleDeg(ROOM.ceilY)).toBeLessThan(halfScreenDeg)
+    // And high enough to read as a ceiling rather than a low overhang: the wall
+    // should still carry the bulk of the frame, so the ceiling takes at most the
+    // top third or so.
+    expect(angleDeg(ROOM.ceilY)).toBeGreaterThan(halfScreenDeg * 0.45)
+  })
+
+  it('keeps the floor line above the bottom of the frame', () => {
+    // The floor meets the back wall at about 27.7° down, inside the 35° half
+    // screen: the seam is visible and the floor fills the strip below it.
+    expect(angleDeg(ROOM.floorY)).toBeLessThan(halfScreenDeg)
+    expect(angleDeg(ROOM.floorY)).toBeGreaterThan(halfScreenDeg * 0.6)
+  })
+
+  it('lets the wall dominate the frame over the ceiling', () => {
+    // The range is a shooting gallery, not a hall: the wall the targets sit on
+    // should be the largest surface on screen, with the ceiling a band above it.
+    // Wall height on screen is everything between the ceiling seam and the
+    // floor seam, i.e. from angleDeg(ceilY) up to angleDeg(floorY) down.
+    const ceilingDeg = angleDeg(ROOM.ceilY)
+    const wallDeg = ceilingDeg + angleDeg(ROOM.floorY)
+    expect(wallDeg).toBeGreaterThan(ceilingDeg * 2)
+  })
+
+  it('leaves pitch headroom above the field', () => {
+    // The view may pitch up PITCH_LIMIT with a ball at the top of the field.
+    const needed =
+      (PITCH_LIMIT * 180) / Math.PI + FIELD_HALF_PITCH_DEG + FIELD_PITCH_CENTRE_DEG
+    expect(angleDeg(ROOM.ceilY)).toBeGreaterThan(needed)
+  })
+
+  it('puts the wall seam below eye level, inside the frame', () => {
+    const seamDeg = (Math.atan(WALL_BANDS.upper[0] / ROOM.backZ) * 180) / Math.PI
+    expect(seamDeg).toBeLessThan(0)
+    expect(Math.abs(seamDeg)).toBeLessThan(halfScreenDeg)
+  })
+})
+
+describe('props stay clear of the target field', () => {
+  it('no corner block faces the patch the field can occupy', () => {
+    // The real requirement: a ball must never be occluded by a block. A ball can
+    // land anywhere in [±FIELD_HALF_YAW, centre ± FIELD_HALF_PITCH], and the view
+    // may be turned, so the reachable band on the back wall is the field patch
+    // plus the whole yaw/pitch swing. Blocks live at the corner, outside it.
+    const yawReachDeg = ((YAW_LIMIT + FIELD_HALF_YAW_DEG * DEG) * 180) / Math.PI
+    const pitchTopDeg = FIELD_PITCH_CENTRE_DEG + FIELD_HALF_PITCH_DEG
+
+    for (const b of PROPS.cornerBlocks) {
+      // Nearest edge of the block, in wall angles.
+      const blockYawDeg = (Math.atan(Math.abs(b.min.x) / ROOM.backZ) * 180) / Math.PI
+      const blockTopDeg = (Math.atan(b.max.y / ROOM.backZ) * 180) / Math.PI
+
+      // Either it starts beyond the reachable yaw, or it tops out below the
+      // field's lowest ball while the view is level.
+      const besideTheField = blockYawDeg >= yawReachDeg
+      const belowTheField = blockTopDeg <= FIELD_PITCH_CENTRE_DEG - FIELD_HALF_PITCH_DEG
+      expect(besideTheField || belowTheField).toBe(true)
+      expect(blockTopDeg).toBeLessThan(pitchTopDeg)
+    }
+  })
+
+  it('props are shorter than the ceiling and above the floor', () => {
+    for (const b of [...PROPS.cornerBlocks, ...PROPS.pilasters]) {
+      expect(b.max.y).toBeLessThan(ROOM.ceilY)
+      expect(b.max.y).toBeGreaterThan(ROOM.floorY)
+      expect(b.min.x).toBeGreaterThanOrEqual(-ROOM.halfX)
+      expect(b.max.x).toBeLessThanOrEqual(ROOM.halfX)
+    }
+  })
+})
+
+describe('room holds the whole target field', () => {
+  // The field is fixed to the wall around the round's forward axis, and the view
+  // may swing ±YAW_LIMIT away from it. If the wall does not cover that swing plus
+  // the field's own half-width, a long flick leaves balls hanging in empty space
+  // — that is the "球飞到页面外" bug.
   const deg = (r) => (r * 180) / Math.PI
 
-  it('back wall is wide enough for the board at full yaw', () => {
-    const needed = deg(YAW_LIMIT) + BOARD_HALF_YAW_DEG
+  it('back wall is wide enough for the field at full yaw', () => {
+    const needed = deg(YAW_LIMIT + FIELD_HALF_YAW_DEG * DEG)
     const available = deg(Math.atan(ROOM.halfX / ROOM.backZ))
     expect(available).toBeGreaterThan(needed)
   })
 
-  it('ceiling covers the board at full pitch up', () => {
-    // Only the ceiling has to rise: the board is placed around the aim point,
-    // and the view may pitch up PITCH_LIMIT with a ball BOARD_HALF above it.
-    const needed = deg(PITCH_LIMIT) + BOARD_HALF_PITCH_DEG
+  it('ceiling covers the field at full pitch up', () => {
+    const needed =
+      deg(PITCH_LIMIT) + FIELD_HALF_PITCH_DEG + FIELD_PITCH_CENTRE_DEG
     expect(deg(Math.atan(ROOM.ceilY / ROOM.backZ))).toBeGreaterThan(needed)
   })
 
@@ -212,11 +294,11 @@ describe('room holds the whole target board', () => {
   })
 
   it('keeps a corner ball on screen and on the wall at the yaw limit', () => {
-    // Worst case: view pinned at +YAW_LIMIT, a ball at the board's far corner.
+    // Worst case: view pinned at +YAW_LIMIT, a ball at the field's far corner.
     const cam = { yaw: YAW_LIMIT, pitch: 0 }
     const ball = {
-      yaw: YAW_LIMIT + BOARD_HALF_YAW_DEG * DEG,
-      pitch: BOARD_HALF_PITCH_DEG * DEG,
+      yaw: FIELD_HALF_YAW_DEG * DEG,
+      pitch: (FIELD_PITCH_CENTRE_DEG + FIELD_HALF_PITCH_DEG) * DEG,
     }
     const p = project(ball, cam, W, H)
     expect(p).not.toBeNull()
@@ -224,11 +306,21 @@ describe('room holds the whole target board', () => {
     expect(p.x).toBeLessThan(W)
     expect(p.y).toBeGreaterThan(0)
     expect(p.y).toBeLessThan(H)
+  })
 
-    // And it must still be on the wall, not past its edge.
-    const wallHalfAngle = Math.atan(ROOM.halfX / ROOM.backZ)
-    expect(Math.abs(ball.yaw)).toBeLessThan(wallHalfAngle)
-    const ceilAngle = Math.atan(ROOM.ceilY / ROOM.backZ)
-    expect(Math.abs(ball.pitch)).toBeLessThan(ceilAngle)
+  it('keeps the whole field on screen from the forward axis', () => {
+    // The framing that matters most: a round starts looking straight ahead and
+    // all six balls must already be visible without a turn.
+    const cam = { yaw: 0, pitch: 0 }
+    const far = {
+      yaw: FIELD_HALF_YAW_DEG * DEG,
+      pitch: (FIELD_PITCH_CENTRE_DEG + FIELD_HALF_PITCH_DEG) * DEG,
+    }
+    const p = project(far, cam, W, H)
+    expect(p.x).toBeGreaterThan(0)
+    expect(p.x).toBeLessThan(W)
+    expect(p.y).toBeGreaterThan(0)
+    expect(p.y).toBeLessThan(H)
+    void FOV_Y
   })
 })

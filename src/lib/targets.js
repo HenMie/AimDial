@@ -1,71 +1,91 @@
 // Target-field rules for the Sixshot-style drill, kept pure so the spawn
 // behaviour can be unit-tested without a canvas.
 //
-// Measured off a 65s Sixshot recording: the six balls are pinned to their own
-// little board, not to the room. The board keeps its orientation and travels
-// with the view — a ball killed on the right respawns on that same board — so
-// the whole field is one rigid slab that slides with the crosshair.
+// Modelled off a 65s Sixshot recording. What the footage shows, and how that
+// differs from a "board that follows the view":
+//
+//   - The six balls are pinned to the back wall of the range. They do not ride
+//     with the crosshair; when a ball dies the replacement appears in the same
+//     patch of wall, which is why the player never has to hunt.
+//   - That patch sits around eye level, spanning roughly 34° wide and 22° tall
+//     measured from the round's starting heading — wide enough to make a flick,
+//     narrow enough that the whole field stays inside one screen.
+//   - Balls can sit very close together. Nothing in the footage enforces a
+//     comfortable gap; the only hard rule is that two balls must not overlap,
+//     because a click between them has to resolve to exactly one.
+//
+// Positions are kept in world (yaw, pitch) on the unit sphere, matching
+// aimModel.js, so a spawn does not depend on where the player happens to be
+// looking at the instant they fire.
 import { wrapAngle, clampPitch } from './aimModel.js'
 
 export const TARGETS_ON_FIELD = 6
-// The board follows the view, so spawns are anchored to wherever the player is
-// looking rather than to the heading the round started on. Passing `null` asks
-// for "anchor to the live camera".
-export const FIELD_ANCHOR = null
-// Board half-extents, in degrees. Footage of the board at rest spans about
-// 44° across and 40° tall; these are the angular bounds a ball can land in,
-// measured from the board centre.
-export const BOARD_HALF_YAW_DEG = 22
-export const BOARD_HALF_PITCH_DEG = 20
-// Balls are packed tight on the board: nearest neighbours in the footage sit as
-// close as 0.6° apart, with a median around 2°. The only hard rule is that two
-// balls must not overlap — kept just above the target's apparent diameter so a
-// click can never resolve to two balls at once.
-export const MIN_TARGET_SEPARATION = (1.6 * Math.PI) / 180
-// A fresh ball may sit under the crosshair. In the footage respawns land on the
-// aim point constantly, so there is no crosshair keep-out.
-export const MIN_CROSSHAIR_OFFSET = 0
-const MAX_SPAWN_ATTEMPTS = 60
 
+// The wall patch the field occupies, in degrees from the round's forward axis.
+// Sized off the footage: at 16:9 and the game's 70° vertical FOV the screen
+// half-angle is about 51°, so ±17°/±11° puts the whole patch comfortably inside
+// the frame with room for a flick.
+export const FIELD_HALF_YAW_DEG = 17
+export const FIELD_HALF_PITCH_DEG = 11
+// The patch is centred slightly above the horizon: in the footage the balls sit
+// against the wall band above the floor line, not down on the ground.
+export const FIELD_PITCH_CENTRE_DEG = 2
+
+// Two balls may not overlap. The target's apparent radius is ~0.72° at the
+// game's FOV (a ~17px ball at 1080p over 70° vertical), so 1.5° of centre
+// separation leaves a sliver of daylight and guarantees a click can only land
+// inside one. This is much tighter than a "readable board" would need — the
+// footage packs balls far closer than that, and it is the point of the drill.
+export const MIN_TARGET_SEPARATION = (1.5 * Math.PI) / 180
+
+const MAX_SPAWN_ATTEMPTS = 80
 const DEG = Math.PI / 180
 
-// The board offsets every spawn, so a caller that does not pass one gets it
-// derived from the camera: the board is a fixed rectangle around the aim point.
-export function boardExtents(fovY, aspect = 16 / 9) {
-  void fovY
-  void aspect
-  return { yaw: BOARD_HALF_YAW_DEG * DEG, pitch: BOARD_HALF_PITCH_DEG * DEG }
-}
-
 /**
- * Relative offset of a spawn from the board centre. Uniform over the board, so
- * the cluster density matches the footage rather than bunching at the centre.
+ * Angular bounds of the field, in radians, relative to the round's forward axis.
  */
-function randomOffset(rand, extents) {
+export function fieldExtents() {
   return {
-    yaw: (rand() * 2 - 1) * extents.yaw,
-    pitch: (rand() * 2 - 1) * extents.pitch,
+    yaw: FIELD_HALF_YAW_DEG * DEG,
+    pitch: FIELD_HALF_PITCH_DEG * DEG,
+    pitchCentre: FIELD_PITCH_CENTRE_DEG * DEG,
   }
 }
 
 /**
- * Pick a spawn on the board centred on `anchor`. `rand` is injectable for
- * deterministic tests. Falls back to the least-crowded candidate if the board
- * is too full to find a clear spot.
+ * A uniformly random spot inside the field patch. Uniform over the rectangle, so
+ * the cluster's density is even rather than bunching at the centre — the footage
+ * fills its patch flatly.
  */
-export function spawnTarget(anchor, existing = [], rand = Math.random, extents = boardExtents()) {
+function randomSpot(rand, extents, origin) {
+  return {
+    yaw: origin.yaw + (rand() * 2 - 1) * extents.yaw,
+    pitch: clampPitch(origin.pitch + extents.pitchCentre + (rand() * 2 - 1) * extents.pitch),
+  }
+}
+
+/** Angular gap between two balls, in radians. */
+function gapBetween(a, b) {
+  return Math.hypot(wrapAngle(a.yaw - b.yaw), a.pitch - b.pitch)
+}
+
+/**
+ * Pick a spawn in the field. `rand` is injectable for deterministic tests.
+ *
+ * `origin` is the round's forward axis, not the live camera: the field is fixed
+ * to the wall so a respawn does not depend on where the player last flicked.
+ * Falls back to the least-crowded candidate when the patch is too full to find a
+ * clear spot.
+ */
+export function spawnTarget(origin, existing = [], rand = Math.random, extents = fieldExtents()) {
   let fallback = null
   let fallbackGap = -Infinity
   for (let i = 0; i < MAX_SPAWN_ATTEMPTS; i += 1) {
-    const off = randomOffset(rand, extents)
-    const candidate = {
-      yaw: anchor.yaw + off.yaw,
-      pitch: clampPitch(anchor.pitch + off.pitch),
-    }
+    const candidate = randomSpot(rand, extents, origin)
 
     let gap = Infinity
     for (const t of existing) {
-      const d = Math.hypot(wrapAngle(t.yaw - candidate.yaw), t.pitch - candidate.pitch)
+      const d = gapBetween(t, candidate)
       if (d < gap) gap = d
     }
     if (gap >= MIN_TARGET_SEPARATION) return candidate
@@ -74,33 +94,38 @@ export function spawnTarget(anchor, existing = [], rand = Math.random, extents =
       fallback = candidate
     }
   }
-  return fallback ?? { yaw: anchor.yaw + MIN_TARGET_SEPARATION, pitch: anchor.pitch }
+  return fallback ?? { yaw: origin.yaw + MIN_TARGET_SEPARATION, pitch: origin.pitch }
 }
 
 /**
- * Six balls on the board in front of the player at the start of a round.
+ * Six balls on the wall in front of the player at the start of a round.
  */
-export function buildField(anchor, count = TARGETS_ON_FIELD, rand = Math.random, extents = boardExtents()) {
+export function buildField(origin, count = TARGETS_ON_FIELD, rand = Math.random, extents = fieldExtents()) {
   const field = []
   for (let i = 0; i < count; i += 1) {
-    field.push(spawnTarget(anchor, field, rand, extents))
+    field.push(spawnTarget(origin, field, rand, extents))
   }
   return field
 }
 
 /**
- * Remove the ball at `index` and drop a fresh one on the board so the count
+ * Remove the ball at `index` and drop a fresh one in the same patch so the count
  * never drops. Returns a new array; never mutates the input.
  */
-export function replaceTarget(field, index, anchor, rand = Math.random, extents = boardExtents()) {
+export function replaceTarget(field, index, origin, rand = Math.random, extents = fieldExtents()) {
   const remaining = field.filter((_, i) => i !== index)
-  return [...remaining, spawnTarget(anchor, remaining, rand, extents)]
+  return [...remaining, spawnTarget(origin, remaining, rand, extents)]
 }
 
 /**
- * The board slides with the view: respawns are measured from where the player
- * is looking now, not from where the round began.
+ * Whether every ball has drifted out of the field patch. Used by the renderer as
+ * a safety net: the patch is fixed, so this should never fire, but a clamp bug
+ * that scattered the field must not strand the player on an empty wall.
  */
-export function boardAnchor(cam) {
-  return { yaw: cam.yaw, pitch: cam.pitch }
+export function fieldInView(field, extents = fieldExtents(), slack = 1.4) {
+  return field.some(
+    (t) =>
+      Math.abs(t.yaw) <= extents.yaw * slack &&
+      Math.abs(t.pitch - extents.pitchCentre) <= extents.pitch * slack,
+  )
 }

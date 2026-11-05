@@ -7,14 +7,18 @@
 // enough for a 2D crosshair trainer and, crucially, monotonic in sensitivity.
 
 // How far the view may swing off the room's forward axis. The arena is a
-// closed box, so a view turned past these bounds points at bare wall with no
-// target board in front of it — the field scatters and balls end up off-screen.
+// closed box, so a view turned past these bounds points past a corner at bare
+// side wall — the field slides off the back wall and balls end up off-screen.
 //
-// Bounds are derived from the board, not guessed: a ball can sit BRD_Y off the
-// board centre, so the wall has to cover YAW_LIMIT + BRD_Y. room.js sizes the
-// box to match, and room.test.js asserts the two stay consistent.
-export const YAW_LIMIT = (50 * Math.PI) / 180
-export const PITCH_LIMIT = (26 * Math.PI) / 180
+// Both bounds are derived from the room, not picked (room.test.js pins them):
+//   yaw   — the back wall's half-angle is 48.4° and the field reaches 17° past
+//           the view, so 30° is the most that still keeps every ball on the wall.
+//   pitch — the ceiling's back edge is 20.6° up and the field reaches 13° up,
+//           so 9° is about the most that still keeps a ball on a wall.
+// A six-target drill is a flicks-only drill: turning 30° is already outside what
+// the test measures, so the narrow budget costs nothing.
+export const YAW_LIMIT = (30 * Math.PI) / 180
+export const PITCH_LIMIT = (9 * Math.PI) / 180
 // Vertical FOV, matching Aim Lab's default of 70 (about 103° horizontal at
 // 16:9). A wider lens exaggerates the stretch at the edges of the frame, which
 // is what makes turning feel like the wall is rushing past.
