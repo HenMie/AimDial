@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { resolveSetup, round, DEFAULT_EDPI } from '../lib/sens.js'
+import { resolveSetup, round } from '../lib/sens.js'
 
 export default function SetupScreen({ onStart, initial }) {
   const [dpi, setDpi] = useState(initial?.dpi ?? '800')
@@ -48,10 +48,11 @@ export default function SetupScreen({ onStart, initial }) {
           inputMode="decimal"
           min="0"
           step="0.001"
-          placeholder="留空则按 256 eDPI 换算"
+          placeholder="例如 0.18"
           value={sens}
           onChange={(e) => setSens(e.target.value)}
           autoComplete="off"
+          required
         />
       </label>
 
@@ -72,15 +73,9 @@ export default function SetupScreen({ onStart, initial }) {
             </div>
           </>
         ) : (
-          <p className="readout-hint">填入 DPI 后显示换算结果。</p>
+          <p className="readout-hint">DPI 与灵敏度都填对后显示换算结果。</p>
         )}
       </div>
-
-      {preview?.sensWasDefaulted && (
-        <p className="note">
-          灵敏度按 {DEFAULT_EDPI} eDPI 档位推算。如果你知道自己在游戏里的真实数值，填上会更准。
-        </p>
-      )}
 
       {error && <p className="error">{error}</p>}
 

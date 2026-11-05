@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   project,
   clampPitch,
+  clampYaw,
   wrapAngle,
   isHit,
   targetRadiusPx,
@@ -10,12 +11,13 @@ import {
 import {
   buildField,
   replaceTarget,
-  spawnExtents,
+  boardExtents,
+  boardAnchor,
   TARGETS_ON_FIELD,
   FIELD_ANCHOR,
 } from '../lib/targets.js'
 import { summarize, meanOvershoot } from '../lib/scoring.js'
-import { DEG_PER_COUNT } from '../lib/sens.js'
+import { degPerPointerUnit } from '../lib/sens.js'
 import { usePointerLock } from '../hooks/usePointerLock.js'
 import {
   focalFor,
@@ -65,7 +67,7 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
   const [hud, setHud] = useState({ score: 0, acc: 1, shots: 0, left: ROUND_MS })
   const [result, setResult] = useState(null)
 
-  const { locked, request } = usePointerLock(canvasRef)
+  const { locked, request, rawInput } = usePointerLock(canvasRef)
 
   // Mutable simulation state — kept out of React to avoid re-renders per frame.
   const sim = useRef(null)
@@ -73,14 +75,18 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
   const idleField = useRef(null)
 
   // Degrees the view turns per unit of reported pointer movement. Pointer Lock
-  // reports movement in CSS pixels, i.e. raw counts divided by the display
-  // scale factor — on a 150% display one count arrives as 0.667px — so the
-  // ratio has to be multiplied back out or the view turns too slowly.
-  const countsPerUnit = Math.min(Math.max(window.devicePixelRatio || 1, 1), 3)
-  const degPerUnit = DEG_PER_COUNT * Math.max(sensitivity, 0.01) * countsPerUnit
+  // under `unadjustedMovement` reports raw device counts — the same unit the
+  // game reads — so the gain is the game's yaw constant and nothing more.
+  //
+  // Two wrong turns live in the history here, both worth naming so they are not
+  // reintroduced: multiplying by devicePixelRatio (display scaling, unrelated
+  // to the mouse, and 1.0 on an unscaled display so it silently did nothing)
+  // and multiplying by dpi/96 (treats the count as a CSS pixel, which made the
+  // view spin 16x too fast).
+  const degPerUnit = degPerPointerUnit(sensitivity)
 
   if (!idleField.current) {
-    idleField.current = buildField(FIELD_ANCHOR, TARGETS_ON_FIELD, Math.random)
+    idleField.current = buildField(FIELD_ANCHOR ?? { yaw: 0, pitch: 0 }, TARGETS_ON_FIELD, Math.random)
   }
 
   const setPhaseSafe = useCallback((next) => {
@@ -93,18 +99,15 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
     if (!stage) return
     const rect = stage.getBoundingClientRect()
     const cam = { yaw: 0, pitch: 0 }
-    const aspect = rect.height > 0 ? rect.width / rect.height : 16 / 9
-    const extents = spawnExtents(FOV_Y, aspect)
+    const extents = boardExtents(FOV_Y)
     const now = performance.now()
 
     sim.current = {
       cam,
       width: rect.width,
       height: rect.height,
-      // Spawn box follows the canvas aspect so a wide frame spreads targets
-      // horizontally instead of bunching them in the middle.
       extents,
-      targets: buildField(FIELD_ANCHOR, TARGETS_ON_FIELD, Math.random, extents).map((t) => ({
+      targets: buildField(FIELD_ANCHOR ?? { yaw: 0, pitch: 0 }, TARGETS_ON_FIELD, Math.random, extents).map((t) => ({
         ...t,
         bornAt: now,
       })),
@@ -187,7 +190,7 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
         return
       }
       const radPerUnit = (degPerUnit * Math.PI) / 180
-      s.cam.yaw += e.movementX * radPerUnit
+      s.cam.yaw = clampYaw(s.cam.yaw + e.movementX * radPerUnit)
       s.cam.pitch = clampPitch(s.cam.pitch - e.movementY * radPerUnit)
     }
     window.addEventListener('mousemove', onMove)
@@ -230,9 +233,11 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
           at: now,
           seed: Math.random() * TAU,
         })
-        // Replace the killed target so the field stays at six. The replacement
-        // is anchored to the same frontal plane, never to the current view.
-        s.targets = replaceTarget(s.targets, bestIndex, FIELD_ANCHOR, Math.random, s.extents).map(
+        // Replace the killed ball so the field stays at six. Sixshot's board
+        // rides with the view, so the replacement is anchored to the live
+        // camera, not to where the round began.
+        const anchor = FIELD_ANCHOR ?? boardAnchor(s.cam)
+        s.targets = replaceTarget(s.targets, bestIndex, anchor, Math.random, s.extents).map(
           (t) => ({ ...t, bornAt: t.bornAt ?? now }),
         )
       }
@@ -385,6 +390,11 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
           <button type="button" className="stage-start" onClick={request}>
             继续
           </button>
+          {rawInput === false && (
+            <p className="overlay-hint warn">
+              浏览器拒绝了原始输入，系统鼠标加速会介入，本轮手感仅供参考。
+            </p>
+          )}
         </div>
       )}
 
@@ -757,7 +767,7 @@ function driftTargetIntoView(sim, now) {
 
   const dYaw = wrapAngle(nearest.yaw - sim.cam.yaw)
   const dPitch = nearest.pitch - sim.cam.pitch
-  sim.cam.yaw += dYaw * 0.12
+  sim.cam.yaw = clampYaw(sim.cam.yaw + dYaw * 0.12)
   sim.cam.pitch = clampPitch(sim.cam.pitch + dPitch * 0.12)
 }
 

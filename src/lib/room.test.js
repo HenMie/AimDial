@@ -11,12 +11,14 @@ import {
   ROOM,
   NEAR_Z,
 } from './room.js'
-import { project } from './aimModel.js'
+import { project, YAW_LIMIT, PITCH_LIMIT } from './aimModel.js'
+import { BOARD_HALF_YAW_DEG, BOARD_HALF_PITCH_DEG } from './targets.js'
 
 const W = 1280
 const H = 720
 const FOCAL = focalFor(H)
 const LEVEL = { yaw: 0, pitch: 0 }
+const DEG = Math.PI / 180
 
 describe('world to camera', () => {
   it('is the identity when the camera looks down +Z', () => {
@@ -180,5 +182,53 @@ describe('room', () => {
       { x: 1, y: 1, z: -2 },
     ]
     expect(projectPolygon(behind, LEVEL, W, H, FOCAL)).toBeNull()
+  })
+})
+
+describe('room holds the whole target board', () => {
+  // Balls sit up to BOARD_HALF off the board centre, and the board travels with
+  // the view. If the wall does not cover YAW_LIMIT + BOARD_HALF, a long sweep
+  // leaves balls hanging in empty space — that is the "球飞到页面外" bug.
+  const deg = (r) => (r * 180) / Math.PI
+
+  it('back wall is wide enough for the board at full yaw', () => {
+    const needed = deg(YAW_LIMIT) + BOARD_HALF_YAW_DEG
+    const available = deg(Math.atan(ROOM.halfX / ROOM.backZ))
+    expect(available).toBeGreaterThan(needed)
+  })
+
+  it('ceiling covers the board at full pitch up', () => {
+    // Only the ceiling has to rise: the board is placed around the aim point,
+    // and the view may pitch up PITCH_LIMIT with a ball BOARD_HALF above it.
+    const needed = deg(PITCH_LIMIT) + BOARD_HALF_PITCH_DEG
+    expect(deg(Math.atan(ROOM.ceilY / ROOM.backZ))).toBeGreaterThan(needed)
+  })
+
+  it('keeps the floor line on screen', () => {
+    // The floor is deliberately shallower than the ceiling. If it drops below
+    // the vertical half-FOV the room reads as one flat wall with no horizon.
+    const halfScreen = deg(Math.atan(H / 2 / FOCAL))
+    expect(deg(Math.atan(Math.abs(ROOM.floorY) / ROOM.backZ))).toBeLessThan(halfScreen)
+  })
+
+  it('keeps a corner ball on screen and on the wall at the yaw limit', () => {
+    // Worst case: view pinned at +YAW_LIMIT, a ball at the board's far corner.
+    const cam = { yaw: YAW_LIMIT, pitch: 0 }
+    const ball = {
+      yaw: YAW_LIMIT + BOARD_HALF_YAW_DEG * DEG,
+      pitch: BOARD_HALF_PITCH_DEG * DEG,
+    }
+    const p = project(ball, cam, W, H)
+    expect(p).not.toBeNull()
+    expect(p.x).toBeGreaterThan(0)
+    expect(p.x).toBeLessThan(W)
+    expect(p.y).toBeGreaterThan(0)
+    expect(p.y).toBeLessThan(H)
+
+    // And it must still be on the wall, not past its edge.
+    const wallHalfAngle = Math.atan(ROOM.halfX / ROOM.backZ)
+    expect(Math.abs(ball.yaw)).toBeLessThan(wallHalfAngle)
+    const ceilAngle = Math.atan(ROOM.ceilY / ROOM.backZ)
+    expect(Math.abs(ball.pitch)).toBeLessThan(ceilAngle)
   })
 })

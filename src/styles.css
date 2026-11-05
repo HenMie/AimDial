@@ -439,6 +439,11 @@ input::placeholder {
   color: rgba(176, 194, 214, 0.7);
 }
 
+.overlay-hint.warn {
+  max-width: 320px;
+  color: rgba(240, 176, 96, 0.9);
+}
+
 .stage-start {
   margin-top: 10px;
   min-width: 136px;

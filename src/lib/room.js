@@ -9,14 +9,28 @@ import { FOV_Y } from './aimModel.js'
 
 // A box the player stands inside. Walls exist on every side, so turning never
 // reveals the edge of the world the way a single backdrop plane would. The eye
-// sits at the vertical centre of the room, so the target band is framed by wall
-// above and below instead of hugging the floor.
+// sits near the vertical centre of the room, so the target band is framed by
+// wall above and below instead of hugging the floor.
+//
+// Sized to hold the whole target board at the limit of the view swing: a ball
+// can sit BOARD_HALF off the board centre, so the back wall must cover
+// YAW_LIMIT + BOARD_HALF_YAW_DEG horizontally and PITCH_LIMIT +
+// BOARD_HALF_PITCH_DEG vertically. With the board at ±22°/±20° and the view at
+// ±50°/±26° that is ±72° / ±46°. Over an 8-unit depth that needs halfX >= 24.6
+// and a ceiling at >= 8.3.
+//
+// The two axes are independent, and the floor is deliberately not symmetric:
+// where the floor line crosses the screen is set by floorY/backZ, not by the
+// ceiling. Dropping the floor to match the ceiling pushes that line below the
+// frame and the room reads as one flat wall. Keeping it at -4.2 holds the
+// skirting around 28° down, inside the 35° half-screen, while the ceiling is
+// free to rise to whatever the board needs.
 export const ROOM = {
-  halfX: 13,
+  halfX: 26,
   backZ: 8,
   frontZ: -10,
   floorY: -4.2,
-  ceilY: 4.2,
+  ceilY: 9,
 }
 
 // Geometry is clipped here before projection; dividing by a z near zero is what
