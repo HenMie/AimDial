@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules
+dist
+dist-ssr
+
+# 部署
+.vercel
+
+# 本地环境
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# 编辑器 / 工具状态
+.idea
+.vscode/*
+!.vscode/extensions.json
+.zcode
+.workbuddy-ai
+.playwright-cli
+
+# 本地参考素材（录屏、抓帧）
+tmp/
