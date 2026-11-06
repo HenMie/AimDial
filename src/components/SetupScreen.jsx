@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { resolveSetup, round } from '../lib/sens.js'
 
+// Presets cover what the vast majority of mice ship or get set to; typing is
+// still allowed for everything else.
+const DPI_PRESETS = [400, 800, 1200, 1600, 3200]
+// A sparse set only: sensitivity is personal enough that a long row of values
+// reads as clutter, and players know their own number anyway.
+const SENS_PRESETS = [0.15, 0.18, 0.2, 0.3]
+
 export default function SetupScreen({ onStart, initial }) {
   const [dpi, setDpi] = useState(initial?.dpi ?? '800')
   const [sens, setSens] = useState(initial?.sens ?? '')
@@ -17,7 +24,7 @@ export default function SetupScreen({ onStart, initial }) {
       return
     }
     if (Number(r.sens.toFixed(3)) <= 0) {
-      setError('游戏灵敏度按三位小数取整后必须大于 0。')
+      setError('灵敏度不能低于 0.001。')
       return
     }
     setError(null)
@@ -29,10 +36,23 @@ export default function SetupScreen({ onStart, initial }) {
       <h1 className="brand">
         Aim<span>Dial</span>
       </h1>
-      <p className="lede">中等难度 · 30 bot · 游戏内实测</p>
+      <p className="lede">用游戏内靶场实测，找出最适合你的灵敏度</p>
 
-      <label className="field">
+      <div className="field">
         <span className="field-label">鼠标 DPI</span>
+        <div className="chips" role="group" aria-label="常用 DPI">
+          {DPI_PRESETS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className="chip"
+              aria-pressed={Number(dpi) === value}
+              onClick={() => setDpi(String(value))}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
         <input
           type="number"
           inputMode="numeric"
@@ -41,12 +61,26 @@ export default function SetupScreen({ onStart, initial }) {
           value={dpi}
           onChange={(e) => setDpi(e.target.value)}
           autoComplete="off"
+          aria-label="鼠标 DPI"
           required
         />
-      </label>
+      </div>
 
-      <label className="field">
-        <span className="field-label">当前游戏内灵敏度</span>
+      <div className="field">
+        <span className="field-label">游戏内灵敏度</span>
+        <div className="chips" role="group" aria-label="常用灵敏度">
+          {SENS_PRESETS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className="chip"
+              aria-pressed={Number(sens) === value}
+              onClick={() => setSens(String(value))}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
         <input
           type="number"
           inputMode="decimal"
@@ -56,37 +90,22 @@ export default function SetupScreen({ onStart, initial }) {
           value={sens}
           onChange={(e) => setSens(e.target.value)}
           autoComplete="off"
+          aria-label="游戏内灵敏度"
           required
         />
-      </label>
-
-      <div className="readout">
-        {preview ? (
-          <>
-            <div className="readout-item">
-              <span className="readout-value">{round(preview.edpi, 0)}</span>
-              <span className="readout-label">eDPI</span>
-            </div>
-            <div className="readout-item">
-              <span className="readout-value">{round(preview.sens, 3)}</span>
-              <span className="readout-label">游戏灵敏度</span>
-            </div>
-            <div className="readout-item">
-              <span className="readout-value">{round(preview.cm360, 1)}</span>
-              <span className="readout-label">cm / 360°</span>
-            </div>
-          </>
-        ) : (
-          <p className="readout-hint">DPI 与灵敏度都填对后显示换算结果。</p>
-        )}
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {preview && (
+        <p className="setup-hint">
+          从 <strong>{round(preview.sens, 3)}</strong> 开始，先测它和上下各一档，再逐步向上或向下收紧。
+        </p>
+      )}
+
+      {error && <p className="error" role="alert">{error}</p>}
 
       <button type="submit" className="btn primary block">
-        开始校准
+        开始测试
       </button>
-
     </form>
   )
 }

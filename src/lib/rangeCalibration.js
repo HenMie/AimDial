@@ -3,21 +3,21 @@ export const STEP_FACTORS = Object.freeze([1.25, 1.12, 1.06])
 export const MIN_MEAN_GAIN = 1
 
 export const END_REASONS = Object.freeze({
-  plateau: '精细档位没有发现足够且可重复的提升，保留已确认档位。',
+  plateau: '更小的步长没有带来稳定提升，保留当前档位。',
   resolution: '按三位小数取整后，附近档位已无法进一步区分。',
-  ceiling: '本组各档均达到 29–30 杀，中等难度接近满分，暂不足以区分灵敏度。',
-  floor: '本组各档均只有 0–1 杀，当前测试不足以区分灵敏度，请先确认测试条件。',
-  manual: '你已提前结束；保留当前基准或最近一次通过交错复测的档位。',
+  ceiling: '各档位均达到 29–30 杀，中等难度接近满分，区分能力不足。',
+  floor: '各档位均只有 0–1 杀，当前测试不足以区分灵敏度，请先确认测试条件。',
+  manual: '你已提前结束；结果取当前基准或最近一次通过复查的档位。',
 })
 
 export function parseKills(value) {
   if (typeof value !== 'number' && typeof value !== 'string') {
-    throw new RangeError('击杀数量必须是 0–30 的整数。')
+    throw new RangeError('击杀数需为 0–30 的整数。')
   }
-  if (String(value).trim() === '') throw new RangeError('请填写本轮击杀数量。')
+  if (String(value).trim() === '') throw new RangeError('请填写本轮击杀数。')
   const kills = Number(value)
   if (!Number.isInteger(kills) || kills < 0 || kills > BOTS_PER_RUN) {
-    throw new RangeError('击杀数量必须是 0–30 的整数。')
+    throw new RangeError('击杀数需为 0–30 的整数。')
   }
   return kills
 }
@@ -45,7 +45,7 @@ function finish(session, reason) {
 function narrow(session) {
   if (session.level === session.factors.length - 1) return finish(session, 'plateau')
   const next = { ...session, level: session.level + 1 }
-  const plan = screenPlan(next, '未发现足够且可重复的提升，保留当前档位，缩小倍率后再测。')
+  const plan = screenPlan(next, '未发现稳定提升，保留当前档位，缩小步长后继续测试。')
   if (plan.candidates.length === 1) return finish({ ...next, plan }, 'resolution')
   return { ...next, plan }
 }
@@ -86,7 +86,7 @@ function advance(session) {
     return { ...screened, plan: {
       phase: 'confirm', baseline: a, challenger: b, candidates: [a, b], schedule,
       cursor: 0, start: session.runs.length,
-      message: `${b.toFixed(3)} 初测领先，交错复测确认；单次高分不会直接替换当前档位。`,
+      message: `${b.toFixed(3)} 初测领先，接下来与 ${a.toFixed(3)} 交错复测 4 轮确认；单次高分不会直接替换当前档位。`,
     } }
   }
 
@@ -101,7 +101,7 @@ function advance(session) {
   })
   const accepted = differences.every((difference) => difference > 0) && challenger.score - base.score >= session.minGain
   const driftWarning = base.kills[1] <= base.kills[0] - 3
-    ? '同组基准档成绩下降至少 3 杀，可能有状态波动；建议休息后继续确认。' : null
+    ? '基准档成绩下降 3 杀以上，可能有状态波动，建议休息后继续复查。' : null
   const confirmed = {
     ...next, confirmations: session.confirmations + 1,
     incumbent: accepted ? challenger.sensitivity : session.incumbent,
@@ -110,7 +110,7 @@ function advance(session) {
   }
   if (!accepted) return narrow(confirmed)
   return { ...confirmed, plan: screenPlan(confirmed,
-    `已确认 ${challenger.sensitivity.toFixed(3)} 在两次比较中均领先，平均提升 ${(challenger.score - base.score).toFixed(1)} 杀；以此为基准继续探索。`) }
+    `${challenger.sensitivity.toFixed(3)} 两次对比均领先，平均多击杀 ${(challenger.score - base.score).toFixed(1)} 个，已更新基准。`) }
 }
 
 export function createSession(setup, options = {}) {
@@ -129,7 +129,7 @@ export function createSession(setup, options = {}) {
     setup: { ...setup }, factors, minGain, incumbent, level: 0, runs: [], decisions: [],
     confirmations: 0, latestComparison: [], warning: null, done: false, reason: null,
   }
-  return { ...session, plan: screenPlan(session, '先测试当前档及两侧档位；之后根据本组成绩决定推进方向。') }
+  return { ...session, plan: screenPlan(session, '先测当前档位及上下各一档，再根据本轮成绩决定推进方向。') }
 }
 
 export function recordKills(session, value) {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { completeEarly, createSession, recordKills, summarizeSession, undoLastRun } from '../lib/rangeCalibration.js'
 import { saveDraft } from '../lib/storage.js'
-import { cm360 } from '../lib/sens.js'
 
 export function useCalibration(setup, id, initialSession, initialInput = '') {
   const [session, setSession] = useState(() => initialSession ?? createSession(setup))
@@ -20,9 +19,8 @@ export function useCalibration(setup, id, initialSession, initialInput = '') {
   }, [id, session, kills])
   const result = useMemo(() => {
     if (!session.done) return null
-    const summary = summarizeSession(session)
-    return { ...summary, cm360: cm360(setup.dpi, summary.sensitivity) }
-  }, [session, setup.dpi])
+    return summarizeSession(session)
+  }, [session])
   return {
     session, kills, setKills, saved, saveError,
     current: session.plan.schedule[session.plan.cursor],

@@ -49,28 +49,25 @@ export function resolveSetup(dpiRaw, sensRaw) {
   const sens = toNumber(rawSens)
 
   if (!isPositive(dpi)) {
-    return { ok: false, error: 'DPI 必须是大于 0 的数字', dpi, sens: NaN }
+    return { ok: false, error: 'DPI 需为大于 0 的数字', dpi, sens: NaN }
   }
   if (rawSens === '') {
-    return { ok: false, error: '请填写当前游戏内灵敏度（它决定搜索的起点）', dpi, sens: NaN }
+    return { ok: false, error: '请填写游戏内当前灵敏度，它是测试的起点', dpi, sens: NaN }
   }
   if (!isPositive(sens)) {
-    return { ok: false, error: '灵敏度必须是大于 0 的数字', dpi, sens: NaN }
+    return { ok: false, error: '灵敏度需为大于 0 的数字', dpi, sens: NaN }
   }
 
   const edpi = dpi * sens
-  return {
-    ok: true,
-    error: null,
-    dpi,
-    sens,
-    edpi,
-    cm360: cm360(dpi, sens),
-  }
+  return { ok: true, error: null, dpi, sens, edpi }
 }
 
 /**
  * Centimetres of mouse travel for a full 360° turn.
+ *
+ * Not shown anywhere in the UI — cm/360° means little to most players — but
+ * kept as the shared physical reference that the pointer-gain test checks
+ * against.
  */
 export function cm360(dpi, sens) {
   if (!isPositive(dpi) || !isPositive(sens)) return NaN

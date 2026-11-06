@@ -11,11 +11,11 @@ export default function App() {
   const [data, setData] = useState({ history: [], draft: null })
   const [error, setError] = useState(null)
   useEffect(() => {
-    try { setData(loadData()) } catch (reason) { setError(`读取失败：${reason.message}`) }
+    try { setData(loadData()) } catch (reason) { setError(`读取本地数据失败：${reason.message}`) }
   }, [])
   const start = (setup) => {
     if (data.draft) {
-      setError('请先继续或放弃未完成的测试。')
+      setError('还有一次测试未完成，请先继续或放弃该进度。')
       return
     }
     setActive({ id: crypto.randomUUID(), setup })
@@ -28,7 +28,7 @@ export default function App() {
       setActive({ id: draft.id, setup: draft.setup, initialSession: restoreDraft(draft), initialInput: draft.input })
       setError(null)
       setStep('calibrate')
-    } catch (reason) { setError(`无法恢复：${reason.message}`) }
+    } catch (reason) { setError(`无法恢复上次进度：${reason.message}`) }
   }
   const finish = (result) => {
     try {
@@ -37,7 +37,7 @@ export default function App() {
       setReport(next.history.find((entry) => entry.id === active.id))
       setError(null)
       setStep('result')
-    } catch (reason) { setError(`报告未保存，进度仍保留：${reason.message}`) }
+    } catch (reason) { setError(`结果未保存，测试进度仍保留：${reason.message}`) }
   }
   const home = () => {
     try { setData(loadData()); setError(null); setStep('setup') }
@@ -52,7 +52,8 @@ export default function App() {
       {error && <p className="error app-error" role="alert">{error}</p>}
       {step === 'setup' && <>
         {data.draft && <section className="panel resume-card">
-          <div><h2>继续上次测试</h2><p>已记录 {data.draft.runs.length} 轮 · {data.draft.setup.dpi} DPI</p></div>
+          <h2>继续上次测试</h2>
+          <p>已记录 {data.draft.runs.length} 轮，将从第 {data.draft.runs.length + 1} 轮继续。</p>
           <button className="btn primary block" onClick={resume}>继续测试</button>
           <details><summary>放弃本次进度</summary><button className="btn ghost block" onClick={abandon}>确认放弃，重新开始</button></details>
         </section>}
@@ -62,13 +63,18 @@ export default function App() {
           <ul>{data.history.map((entry) => <li key={entry.id}>
             <button className="history-entry" onClick={() => { setReport(entry); setStep('result') }}>
               <span><strong>{Number(entry.sensitivity).toFixed(3)}</strong><small>{new Date(entry.at).toLocaleString('zh-CN')} · {entry.rounds} 轮</small></span>
-              <span>{entry.mode === 'range-medium-30' ? `${entry.score.toFixed(1)} / 30` : '旧版'} <span aria-hidden="true">↗</span></span>
+              <span>{entry.mode === 'range-medium-30' ? `平均 ${entry.score.toFixed(1)} 杀` : '旧版'} <span aria-hidden="true">↗</span></span>
             </button>
           </li>)}</ul>
         </section>}
       </>}
       {step === 'calibrate' && <CalibrationScreen key={active.id} {...active} onFinish={finish} onHome={home} />}
       {step === 'result' && <ResultScreen result={report} onRestart={home} />}
+      <footer className="site-footer">
+        <span>Made by <strong>Chouann</strong></span>
+        <span aria-hidden="true">·</span>
+        <a href="https://github.com/HenMie/AimDial" target="_blank" rel="noreferrer">源码 ↗</a>
+      </footer>
     </main>
   )
 }

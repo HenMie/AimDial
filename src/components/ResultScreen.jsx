@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { cm360, round } from '../lib/sens.js'
+
+const END_NOTE = {
+  plateau: '更小的步长没有带来稳定提升，保留当前档位。',
+  resolution: '游戏灵敏度最小只能调到 0.001，已无法进一步区分。',
+  ceiling: '各档位均接近满分，当前难度区分度不足。建议换用更难的方式重测。',
+  floor: '各档位均只有 0–1 杀，测试条件可能有误，请检查后重测。',
+  manual: '你已提前结束，结果取当前基准档位。',
+}
 
 export default function ResultScreen({ result, onRestart }) {
   const [copied, setCopied] = useState(false)
@@ -11,7 +18,6 @@ export default function ResultScreen({ result, onRestart }) {
   const lastConfirmation = confirmed.at(-1)
   const initial = result.initialSensitivity ?? result.setup?.sens
   const difference = initial ? (result.sensitivity / initial - 1) * 100 : null
-  const travel = result.cm360 ?? cm360(result.dpi, result.sensitivity)
   const copy = async () => {
     try { await navigator.clipboard.writeText(result.sensitivity.toFixed(3)); setCopied(true); setCopyError(null) }
     catch (error) { setCopyError(`复制失败：${error.message}`) }
@@ -23,19 +29,19 @@ export default function ResultScreen({ result, onRestart }) {
     confirmedGain = challenger.score - baseline.score
   }
   return <section className="panel result">
-    <header className="range-heading"><button className="text-button" onClick={onRestart}>返回</button><span>{result.at ? new Date(result.at).toLocaleDateString('zh-CN') : '测试报告'}</span><span>{result.rounds} 轮</span></header>
-    <div className="sensitivity-focus"><h1>{confirmed.length ? '建议灵敏度' : '保留灵敏度'}</h1><strong>{result.sensitivity.toFixed(3)}</strong>
-      <p>{initial != null ? `${initial.toFixed(3)} → ${result.sensitivity.toFixed(3)}` : `${result.dpi} DPI`}{difference != null && ` · ${difference > 0 ? '+' : ''}${difference.toFixed(1)}%`}</p>
+    <header className="range-heading"><button className="text-button" onClick={onRestart}>← 返回</button><span>{result.at ? new Date(result.at).toLocaleDateString('zh-CN') : '测试结果'}</span><span>{result.rounds} 轮</span></header>
+    <div className="sensitivity-focus">
+      <h1>{confirmed.length ? '建议灵敏度' : '保留当前灵敏度'}</h1>
+      <strong>{result.sensitivity.toFixed(3)}</strong>
+      <p>{initial != null ? `原为 ${initial.toFixed(3)}` : `${result.dpi} DPI`}{difference != null && ` · ${difference > 0 ? '调高' : difference < 0 ? '调低' : '不变'} ${Math.abs(difference).toFixed(1)}%`}</p>
     </div>
     <div className="report-metrics">
-      <div><strong>{result.score == null ? '—' : result.score.toFixed(1)}<small> / 30</small></strong><span>{result.mode === 'range-medium-30' ? '该档平均击杀' : '历史得分'}</span></div>
-      <div><strong>{round(result.edpi, 1)}</strong><span>eDPI · {result.dpi} DPI</span></div>
-      <div><strong>{round(travel, 1)}<small> cm</small></strong><span>每 360° 鼠标行程</span></div>
-      <div><strong>{confirmed.length}</strong><span>通过复测的提升</span></div>
+      <div><strong>{result.score == null ? '—' : result.score.toFixed(1)}<small> / 30</small></strong><span>平均每轮击杀</span></div>
+      <div><strong>{confirmed.length}</strong><span>经复查确认的提升</span></div>
     </div>
-    <p className="report-verdict">{result.message ?? '此记录来自早期版本，以下展示已保存的数据。'}</p>
-    {confirmedGain != null && <p className="report-verdict">最近一次确认：{lastConfirmation.baseline.toFixed(3)} → {lastConfirmation.challenger.toFixed(3)}，平均多击杀 {confirmedGain.toFixed(1)} 个，两次成对提升分别为 {lastConfirmation.differences.map((value) => `+${value}`).join('、')} 个。</p>}
-    {result.tied && <p className="report-verdict">最近一组表现接近的实测点：{result.leaders.map((value) => value.toFixed(3)).join('、')}，与保留档分差不足 {result.minGain} 杀。</p>}
+    <p className="report-verdict">{result.message ?? END_NOTE[result.reason] ?? '以下为此前保存的数据。'}</p>
+    {confirmedGain != null && <p className="report-verdict">最近一次复查：{lastConfirmation.baseline.toFixed(3)} → {lastConfirmation.challenger.toFixed(3)}，平均多击杀 {confirmedGain.toFixed(1)} 个，两次对比分别多 {lastConfirmation.differences.map((value) => `+${value}`).join('、')} 个。</p>}
+    {result.tied && <p className="report-verdict">多个档位表现接近（{result.leaders.map((value) => value.toFixed(3)).join('、')}），差距不足 {result.minGain} 个击杀，可从中选择手感合适的档位。</p>}
     {result.warning && <p className="warn">{result.warning}</p>}
     <button className="btn primary block" onClick={copy}>{copied ? '已复制' : '复制灵敏度'}</button>
     {copyError && <p className="error" role="alert">{copyError}</p>}
@@ -43,16 +49,16 @@ export default function ResultScreen({ result, onRestart }) {
       {history.map((entry) => {
         const sensitivity = entry.sensitivity ?? entry.edpi / result.dpi
         const kills = entry.kills ?? []
-        return <article key={entry.edpi} className="setting-result" data-selected={sensitivity === result.sensitivity}>
-          <div className="setting-result-top"><strong>{sensitivity.toFixed(3)}</strong><span>{kills.length ? `${kills.length} 轮` : ''}</span><b>{entry.score.toFixed(1)}<small>{result.mode === 'range-medium-30' ? ' / 30' : ' 分'}</small></b></div>
-          <div className="bar-track"><div className="bar-fill" data-best={sensitivity === result.sensitivity} style={{ width: `${result.mode === 'range-medium-30' ? entry.score / 30 * 100 : 0}%` }} /></div>
-          {kills.length > 0 && <p>{kills.join(' · ')}<span>范围 {Math.min(...kills)}–{Math.max(...kills)}</span></p>}
+        return <article key={entry.edpi ?? entry.sensitivity} className="setting-result" data-selected={sensitivity === result.sensitivity}>
+          <div className="setting-result-top"><strong>{sensitivity.toFixed(3)}</strong><span>{kills.length ? `${kills.length} 轮` : ''}</span><b>{entry.score.toFixed(1)}<small> / 30</small></b></div>
+          <div className="bar-track"><div className="bar-fill" data-best={sensitivity === result.sensitivity} style={{ width: `${Math.min(100, entry.score / 30 * 100)}%` }} /></div>
+          {kills.length > 0 && <p>{kills.join(' · ')}<span>最高 {Math.max(...kills)}，最低 {Math.min(...kills)}</span></p>}
         </article>
       })}
     </div></section>}
-    {decisions.length > 0 && <details className="disclosure"><summary>推进过程<span>{decisions.length} 组</span></summary>
+    {decisions.length > 0 && <details className="disclosure"><summary>判定过程<span>{decisions.length} 组</span></summary>
       <ol className="decision-list">{decisions.map((decision, index) => <li key={index}>
-        <h3>{index + 1}. {decision.phase === 'screen' ? '筛选' : decision.accepted ? '确认通过' : '未通过确认'}{decision.challenger != null && ` · ${decision.challenger.toFixed(3)}`}</h3>
+        <h3>{index + 1}. {decision.phase === 'screen' ? '初测' : decision.accepted ? '复查通过' : '复查未通过'}{decision.challenger != null && ` · ${decision.challenger.toFixed(3)}`}</h3>
         <p>{decision.entries.map((entry) => `${entry.sensitivity.toFixed(3)}：${entry.kills.join('、')} 杀`).join(' / ')}</p>
         {decision.differences && <p>成对差值 {decision.differences.map((value) => `${value > 0 ? '+' : ''}${value}`).join('、')}；{decision.accepted ? '更新基准，继续探索' : '保留基准，缩小步长'}</p>}
       </li>)}</ol>
