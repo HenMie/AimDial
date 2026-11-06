@@ -765,6 +765,263 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .site-footer a { color: #9fb4cc; text-decoration: none; border-bottom: 1px solid transparent; transition: color .15s, border-color .15s; }
 .site-footer a:hover { color: var(--text); border-bottom-color: var(--line); }
 .site-footer a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+
+/* ---------- how it works ---------- */
+
+.explain {
+  width: min(560px, 100%);
+  margin: 12px 0 4px;
+}
+
+.explain h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.explain-lede {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.explain-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.explain-step {
+  border-bottom: 1px solid var(--line);
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.explain[data-revealed='true'] .explain-step {
+  animation: explain-rise .5s cubic-bezier(.2, .7, .3, 1) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@keyframes explain-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.explain-step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.explain-index {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  font: 600 11.5px var(--mono);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  transition: color .2s, border-color .2s, background .2s;
+}
+
+.explain-step[data-open='true'] .explain-index {
+  color: #0a1017;
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+.explain-step-text {
+  display: grid;
+  gap: 5px;
+}
+
+.explain-step-text strong {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.explain-step-text > span {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.explain-toggle {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-top: 3px;
+  font: 18px var(--mono);
+  color: var(--muted);
+}
+
+.explain-toggle::after {
+  content: '+';
+}
+
+.explain-step[data-open='true'] .explain-toggle::after {
+  content: '−';
+}
+
+/* Extra detail stays out of the way until asked for. */
+.explain-detail {
+  margin: -2px 0 16px 34px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #b3c1d4;
+  animation: explain-fade .28s ease-out both;
+}
+
+.explain-visual {
+  padding: 0 0 16px 34px;
+  overflow: hidden;
+}
+
+.explain-diagram {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  overflow: visible;
+}
+
+/* Diagram marks stay hidden until the section scrolls into view. */
+.diagram-rail,
+.diagram-dot,
+.diagram-label,
+.diagram-pill,
+.diagram-step,
+.diagram-gate {
+  opacity: 0;
+}
+
+.explain[data-revealed='true'] .diagram-rail {
+  opacity: 1;
+  animation: explain-draw .7s ease-out both;
+  stroke: var(--line);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.explain[data-revealed='true'] .diagram-dot {
+  animation: explain-pop .35s cubic-bezier(.2, .9, .3, 1.4) both;
+  fill: var(--muted);
+}
+
+.explain[data-revealed='true'] .diagram-dot.is-base {
+  fill: var(--accent-2);
+}
+
+.explain[data-revealed='true'] .diagram-label {
+  animation: explain-fade .4s ease-out both;
+  fill: var(--muted);
+  font: 10px var(--mono);
+}
+
+.explain[data-revealed='true'] .diagram-label.is-base {
+  fill: var(--text);
+}
+
+.diagram-pill rect {
+  fill: transparent;
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.diagram-pill text {
+  fill: var(--muted);
+  font: 11px var(--mono);
+}
+
+.diagram-pill.is-strong rect {
+  fill: rgba(34, 211, 160, .1);
+  stroke: var(--accent-2);
+}
+
+.diagram-pill.is-strong text {
+  fill: var(--accent-2);
+}
+
+.diagram-step rect {
+  fill: rgba(255, 255, 255, .07);
+  stroke: var(--line);
+  stroke-width: 1.2;
+}
+
+.diagram-step text {
+  fill: var(--muted);
+  font: 10px var(--mono);
+}
+
+.diagram-gate line {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.diagram-gate text {
+  fill: var(--accent);
+  font: 10px var(--mono);
+}
+
+.explain[data-revealed='true'] .diagram-pill,
+.explain[data-revealed='true'] .diagram-step,
+.explain[data-revealed='true'] .diagram-gate {
+  animation: explain-pop .35s cubic-bezier(.2, .9, .3, 1.3) both;
+}
+
+.explain-foot {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: #4d5b6e;
+}
+
+@keyframes explain-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes explain-pop {
+  from { opacity: 0; transform: scale(.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes explain-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explain-step {
+    opacity: 1;
+    transform: none;
+  }
+  .explain[data-revealed='true'] .explain-step,
+  .explain[data-revealed='true'] .diagram-rail,
+  .explain[data-revealed='true'] .diagram-dot,
+  .explain[data-revealed='true'] .diagram-label,
+  .explain[data-revealed='true'] .diagram-pill,
+  .explain[data-revealed='true'] .diagram-step,
+  .explain[data-revealed='true'] .diagram-gate,
+  .explain-detail {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
 @media (max-width: 640px) {
   .app, .app.step-calibrate { gap: 16px; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
   .panel { padding: 24px 20px; border-radius: 20px; box-shadow: none; }

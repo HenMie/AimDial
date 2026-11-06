@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import SetupScreen from './components/SetupScreen.jsx'
 import CalibrationScreen from './components/CalibrationScreen.jsx'
 import ResultScreen from './components/ResultScreen.jsx'
+import ExplainSection from './components/ExplainSection.jsx'
 import { discardDraft, finishRun, loadData, restoreDraft } from './lib/storage.js'
 
 export default function App() {
@@ -67,6 +68,7 @@ export default function App() {
             </button>
           </li>)}</ul>
         </section>}
+        <ExplainSection />
       </>}
       {step === 'calibrate' && <CalibrationScreen key={active.id} {...active} onFinish={finish} onHome={home} />}
       {step === 'result' && <ResultScreen result={report} onRestart={home} />}
