@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Find your best Valorant sensitivity with an adaptive golden-section aim test.",
+  "description": "Compare Valorant sensitivity settings using in-game medium 30-bot range results.",
   "engines": {
     "node": ">=18"
   },

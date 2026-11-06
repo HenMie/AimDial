@@ -17,7 +17,7 @@
 // Positions are kept in world (yaw, pitch) on the unit sphere, matching
 // aimModel.js, so a spawn does not depend on where the player happens to be
 // looking at the instant they fire.
-import { wrapAngle, clampPitch } from './aimModel.js'
+import { wrapAngle } from './aimModel.js'
 
 export const TARGETS_ON_FIELD = 6
 
@@ -60,7 +60,7 @@ export function fieldExtents() {
 function randomSpot(rand, extents, origin) {
   return {
     yaw: origin.yaw + (rand() * 2 - 1) * extents.yaw,
-    pitch: clampPitch(origin.pitch + extents.pitchCentre + (rand() * 2 - 1) * extents.pitch),
+    pitch: origin.pitch + extents.pitchCentre + (rand() * 2 - 1) * extents.pitch,
   }
 }
 

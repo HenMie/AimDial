@@ -275,6 +275,34 @@ input::placeholder {
   font-variant-numeric: tabular-nums;
 }
 
+.hud-stats {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: min(630px, calc(100% - 32px));
+}
+
+.hud-stats > div {
+  min-width: 0;
+  padding: 12px 9px;
+  background: rgba(25, 27, 29, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+}
+
+.hud-stats small,
+.hud-stats strong {
+  display: block;
+  line-height: 1.1;
+}
+
+.hud-stats small { color: #b8b9ba; font-size: 11px; }
+.hud-stats strong { color: #f2f3f3; font-size: 24px; }
+
 /* The arena is a lit grey room, so the readouts need their own shade. */
 .hud::before {
   content: '';
@@ -602,4 +630,93 @@ input::placeholder {
   .stage-rounds {
     bottom: 18px;
   }
+}
+
+/* In-game range workflow */
+.app.step-calibrate { padding: 32px 20px 48px; justify-content: center; }
+.range-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.range-counter { color: var(--accent-2); font: 13px var(--mono); }
+.range-title { margin: 24px 0; font-size: clamp(22px, 4vw, 28px); letter-spacing: -0.04em; }
+.range-progress { appearance: none; display: block; width: 100%; height: 3px; margin-top: 16px; border: none; background: var(--line); }
+.range-progress::-webkit-progress-bar { background: var(--line); }
+.range-progress::-webkit-progress-value { background: var(--accent-2); }
+.range-progress::-moz-progress-bar { background: var(--accent-2); }
+.range-instructions { padding: 16px 16px 16px 34px; margin: 0 0 24px; border: 1px solid var(--line); border-radius: var(--radius); color: #b3c1d4; font-size: 13px; line-height: 1.9; }
+.range-instructions li + li { margin-top: 8px; }
+.range-instructions strong { color: var(--text); }
+.range-log { margin: 24px 0; }
+.range-log ol { list-style: none; padding: 0; margin: 12px 0 0; }
+.range-log li { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 10px 0; font: 12px var(--mono); color: var(--muted); }
+.range-log strong { color: var(--text); }
+.range-undo { border: none; background: none; padding: 8px 0; color: var(--focus); font: inherit; font-size: 12px; cursor: pointer; }
+.btn:focus-visible, .range-undo:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+/* Mobile range journal and reports */
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+.app, .app.step-calibrate { min-height: 100svh; justify-content: flex-start; gap: 20px; padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+.panel { padding: 28px; }
+h1, h2, h3, p { overflow-wrap: anywhere; }
+.text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px 0 0; background: none; border: none; color: var(--text); font: inherit; cursor: pointer; }
+.range-heading { font-size: 12px; color: var(--muted); }
+.save-status { color: var(--accent-2); white-space: nowrap; }
+.sensitivity-focus { padding: 28px 0 30px; text-align: center; }
+.sensitivity-focus h1 { margin: 0 0 12px; font-size: 14px; color: var(--muted); font-weight: 500; }
+.sensitivity-focus > strong { display: block; font: 650 clamp(58px, 14vw, 80px)/1.1 var(--mono); letter-spacing: -0.065em; color: var(--text); font-variant-numeric: tabular-nums; }
+.sensitivity-focus > p { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+.range-panel .field { margin-bottom: 16px; }
+.range-panel input { font-size: 24px; min-height: 60px; }
+.btn { min-height: 52px; touch-action: manipulation; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.block + .btn.block { margin-top: 12px; }
+.text-button:focus-visible, .history-entry:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.disclosure { margin: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.disclosure + .disclosure { margin-top: -19px; }
+.disclosure summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; font-size: 14px; cursor: pointer; list-style: none; }
+.disclosure summary::-webkit-details-marker { display: none; }
+.disclosure summary::after { content: '+'; color: var(--muted); font: 20px var(--mono); }
+.disclosure[open] summary::after { content: '−'; }
+.disclosure summary span { margin-left: auto; color: var(--muted); font-size: 12px; }
+.disclosure > p { font-size: 13px; line-height: 1.75; color: var(--muted); }
+.run-list, .decision-list { padding: 0; list-style: none; }
+.run-list li { display: flex; align-items: center; justify-content: space-between; min-height: 44px; gap: 16px; border-top: 1px solid var(--line); font: 13px var(--mono); }
+.run-list strong { font-weight: 500; }
+.decision-list li { padding: 12px 0; border-top: 1px solid var(--line); }
+.decision-list h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.decision-list p { margin: 6px 0; font-size: 12px; line-height: 1.8; color: var(--muted); }
+.report-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; padding: 20px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.report-metrics > div { display: flex; flex-direction: column; gap: 6px; }
+.report-metrics strong { font: 600 23px var(--mono); }
+.report-metrics strong small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.report-metrics span { color: var(--muted); font-size: 11px; }
+.report-verdict { font-size: 13px; line-height: 1.8; margin: 18px 0; color: #b3c1d4; }
+.report-section { margin: 28px 0; }
+.report-section h2, .history h2, .resume-card h2 { margin: 0 0 16px; font-size: 18px; font-weight: 600; }
+.setting-results { display: flex; flex-direction: column; gap: 12px; }
+.setting-result { padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.setting-result[data-selected='true'] { border-color: #28725f; background: rgba(34, 211, 160, 0.035); }
+.setting-result-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; font: 14px var(--mono); }
+.setting-result-top span { font: 11px var(--mono); color: var(--muted); }
+.setting-result-top b { margin-left: auto; }
+.setting-result-top small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.setting-result p { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; font: 11px/1.6 var(--mono); color: var(--muted); }
+.history { width: min(560px, 100%); margin: 8px 0; }
+.history li { display: block; padding: 0; border-bottom: 1px solid var(--line); }
+.history-entry { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 80px; width: 100%; border: none; background: none; padding: 14px 4px; color: var(--text); font: 13px var(--mono); text-align: left; cursor: pointer; }
+.history-entry > span:first-child { display: grid; gap: 8px; }
+.history-entry strong { font-size: 20px; font-weight: 500; }
+.history-entry small { font-size: 10px; color: var(--muted); }
+.history-entry > span:last-child { flex-shrink: 0; color: var(--muted); }
+.resume-card p { margin: -4px 0 20px; font-size: 13px; color: var(--muted); }
+.resume-card details { margin-top: 16px; text-align: center; color: var(--muted); font-size: 12px; }
+.resume-card summary { padding: 12px; cursor: pointer; }
+.app-error { width: min(560px, 100%); margin: 0; padding: 14px; background: rgba(255,70,85,.08); border: 1px solid #5b2730; border-radius: 12px; }
+@media (max-width: 640px) {
+  .app, .app.step-calibrate { gap: 16px; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .panel { padding: 24px 20px; border-radius: 20px; box-shadow: none; }
+  .readout { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 16px 8px; gap: 6px; }
+  .readout-value { font-size: 18px; }
+  .readout-label { font-size: 10px; letter-spacing: 0; }
+  input[type='number'] { min-height: 54px; font-size: 20px; }
+  .range-panel input { min-height: 60px; font-size: 26px; }
+  .range-panel .sensitivity-focus { padding: 32px 0; }
 }

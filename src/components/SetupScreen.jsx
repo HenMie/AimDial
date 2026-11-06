@@ -16,6 +16,10 @@ export default function SetupScreen({ onStart, initial }) {
       setError(r.error)
       return
     }
+    if (Number(r.sens.toFixed(3)) <= 0) {
+      setError('游戏灵敏度按三位小数取整后必须大于 0。')
+      return
+    }
     setError(null)
     onStart({ dpi: r.dpi, sens: r.sens, edpi: r.edpi })
   }
@@ -25,7 +29,7 @@ export default function SetupScreen({ onStart, initial }) {
       <h1 className="brand">
         Aim<span>Dial</span>
       </h1>
-      <p className="lede">用自适应的静态点击测试，找到真正适合你的那一个值。</p>
+      <p className="lede">中等难度 · 30 bot · 游戏内实测</p>
 
       <label className="field">
         <span className="field-label">鼠标 DPI</span>
@@ -83,7 +87,6 @@ export default function SetupScreen({ onStart, initial }) {
         开始校准
       </button>
 
-      <p className="fineprint">约 6–10 轮，每轮 60 秒。</p>
     </form>
   )
 }

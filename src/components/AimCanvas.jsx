@@ -48,30 +48,20 @@ const TAU = Math.PI * 2
 // Cell size for the floor and ceiling: see the note in drawRoom.
 const FLOOR_CELL = CHECKER_SIZE * 2
 
-// Palette traced off the footage. The range is a desaturated grey box lit from
-// one side, with the floor much brighter than the walls where the daylight
-// lands — that contrast, not a vignette, is what reads as "outdoors above".
+// Muted greys matched to the available Aimlabs gameplay screenshot.
 const COLORS = {
   sky: ['#7fb0d8', '#c4dceb'],
-  // The range is lit, not moody: every surface is a mid-to-light grey and the
-  // contrast between the two checker tones is gentle. An earlier pass made the
-  // base colours dark and then laid a dark checker over them, which multiplied
-  // straight down to charcoal and read nothing like the footage.
-  ceiling: '#c3c6ca',
-  wallUpper: '#9b9ea2',
-  wallLower: '#a8abaf',
-  wallMoulding: '#7e8286',
-  sideWall: '#94979b',
-  floor: '#d6d7d2',
-  skirt: '#5e6266',
-  prop: '#b4b7bb',
-  propSide: '#a2a5a9',
-  // Checker overlays: the footage's pattern is barely there — two greys a few
-  // percent apart, read as texture rather than as a chessboard. Both tones sit
-  // on a lit base as a gentle modulation, not as a colour pair; a strong pair
-  // here turns the wall into a chessboard and pulls the eye off the balls.
-  checkerLight: 'rgba(255,255,255,0.13)',
-  checkerDark: 'rgba(96,102,108,0.1)',
+  ceiling: '#55575a',
+  wallUpper: '#5b5d60',
+  wallLower: '#696b6e',
+  wallMoulding: '#595b5e',
+  sideWall: '#57595c',
+  floor: '#777977',
+  skirt: '#484a4d',
+  prop: '#737578',
+  propSide: '#616366',
+  checkerLight: 'rgba(255,255,255,0.09)',
+  checkerDark: 'rgba(0,0,0,0.09)',
 }
 
 /**
@@ -359,8 +349,6 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
     request()
   }
 
-  const leftFrac = Math.max(0, Math.min(1, hud.left / ROUND_MS))
-
   return (
     <div
       className="stage"
@@ -373,11 +361,11 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
 
       {phase === 'running' && (
         <div className="hud" aria-hidden="true">
-          <div className="hud-timer">
-            <span style={{ width: `${leftFrac * 100}%` }} data-low={hud.left < 10_000} />
+          <div className="hud-stats">
+            <div><small>分数</small><strong>{Math.round(hud.score)}</strong></div>
+            <div><small>时间</small><strong>{`${Math.floor(Math.ceil(hud.left / 1000) / 60)}:${String(Math.ceil(hud.left / 1000) % 60).padStart(2, '0')}`}</strong></div>
+            <div><small>准确率</small><strong>{Math.round(hud.acc * 100)}%</strong></div>
           </div>
-          <div className="hud-score">{Math.round(hud.score)}</div>
-          {hud.shots > 0 && <div className="hud-acc">{Math.round(hud.acc * 100)}%</div>}
         </div>
       )}
 

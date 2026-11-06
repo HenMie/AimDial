@@ -79,6 +79,12 @@ describe('target field', () => {
     }
   })
 
+  it('does not clamp target positions to the camera pitch limit', () => {
+    const t = spawnTarget(ORIGIN, [], () => 0.95, EXT)
+    expect(t.pitch).toBeGreaterThan(9 * DEG)
+    expect(t.pitch).toBeCloseTo(ORIGIN.pitch + EXT.pitchCentre + 0.9 * EXT.pitch)
+  })
+
   it('sits the field above the horizon', () => {
     // The balls are painted against the wall band, not down on the floor: the
     // patch's centre must be above level.

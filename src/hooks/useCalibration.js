@@ -1,60 +1,34 @@
-import { useCallback, useMemo, useState } from 'react'
-import {
-  createSearch,
-  currentProbe,
-  submit,
-  isDone,
-  recommend,
-  historyOf,
-} from '../lib/goldenSearch.js'
-import { cm360, sensFromEdpi } from '../lib/sens.js'
+import { useEffect, useMemo, useState } from 'react'
+import { completeEarly, createSession, recordKills, summarizeSession, undoLastRun } from '../lib/rangeCalibration.js'
+import { saveDraft } from '../lib/storage.js'
+import { cm360 } from '../lib/sens.js'
 
-/**
- * Drives one calibration session: base eDPI in, a stream of probes out,
- * converged recommendation at the end. Pure state — the search object is
- * rebuilt from the snapshot each update so React sees a fresh reference.
- */
-export function useCalibration(setup) {
-  const [session, setSession] = useState(null)
-
-  const start = useCallback(() => {
-    setSession(snapshot(createSearch(setup.edpi)))
-  }, [setup.edpi])
-
-  const record = useCallback((probeEdpi, score) => {
-    setSession((prev) => (prev ? snapshot(submit(prev.engine, probeEdpi, score)) : prev))
-  }, [])
-
+export function useCalibration(setup, id, initialSession, initialInput = '') {
+  const [session, setSession] = useState(() => initialSession ?? createSession(setup))
+  const [kills, setKills] = useState(initialInput)
+  const [saveError, setSaveError] = useState(null)
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    try {
+      saveDraft(id, session, kills)
+      setSaveError(null)
+      setSaved(true)
+    } catch (error) {
+      setSaveError(`进度未保存：${error.message}`)
+      setSaved(false)
+    }
+  }, [id, session, kills])
   const result = useMemo(() => {
-    if (!session || !session.done) return null
-    const rec = recommend(session.engine)
-    const sens = sensFromEdpi(rec.edpi, setup.dpi)
-    return { ...rec, sensitivity: sens, cm360: cm360(setup.dpi, sens) }
+    if (!session.done) return null
+    const summary = summarizeSession(session)
+    return { ...summary, cm360: cm360(setup.dpi, summary.sensitivity) }
   }, [session, setup.dpi])
-
   return {
-    session,
-    current: session?.nextProbe ?? null,
-    done: Boolean(session?.done),
-    record,
-    start,
-    result,
-  }
-}
-
-function snapshot(engine) {
-  return {
-    engine,
-    lo: engine.lo,
-    hi: engine.hi,
-    baseEdpi: engine.baseEdpi,
-    rounds: engine.rounds,
-    maxRounds: engine.maxRounds,
-    tolerance: engine.tolerance,
-    nextProbe: currentProbe(engine),
-    done: isDone(engine),
-    best: engine.best,
-    lastComparison: engine.lastComparison,
-    history: historyOf(engine),
+    session, kills, setKills, saved, saveError,
+    current: session.plan.schedule[session.plan.cursor],
+    record: (value) => { setSession((previous) => recordKills(previous, value)); setKills('') },
+    undo: () => { setSession((previous) => undoLastRun(previous)); setKills('') },
+    stop: () => setSession((previous) => completeEarly(previous)),
+    done: session.done, result,
   }
 }
