@@ -246,6 +246,12 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
                 <span className="num">{current.toFixed(3)}</span>
                 {' 开始。之后会在它上下各试几个数值，找出最合适的那个。'}
               </>
+            ) : plan.why === 'revisit' ? (
+              <>
+                {'这一轮还是 '}
+                <span className="num">{current.toFixed(3)}</span>
+                {'：最后几个数值咬得太紧，再打一次才能把它们分开。'}
+              </>
             ) : (
               <>
                 {'每次的数值都不一样，都是根据前面 '}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALGORITHM, BOTS_PER_RUN, CONFIRM_Z, EDPI_CEILING, EDPI_FLOOR, END_REASONS,
-  LAYOUT_STEPS, LADDER_ANCHOR, MIN_PROBE_GAP, MODES, SIGMA_KILLS, STEP_DELTAS,
+  LAYOUT_STEPS, LADDER_ANCHOR, MIN_PROBE_GAP, MODES, REVISIT_LIMIT, SIGMA_KILLS, STEP_DELTAS, TIE_BAND_KILLS,
   bracketed, completeEarly, createSession, derive, fitCurve, ladderAnchor, leader,
   openingSchedule, parseKills, plausible, points, proposeNext, rebuildSession,
   recordKills, stepFactors, summarizeSession, undoLastRun,
@@ -172,13 +172,53 @@ describe('confidence, not a kill threshold, decides', () => {
     const { session } = playRun({ width: 50, noise: 2.5, seed: 9 })
     expect(session.done).toBe(true)
     expect(session.runs.length).toBeLessThanOrEqual(30)
-    expect(new Set(session.runs.map((run) => run.sensitivity)).size).toBe(session.runs.length)
+    // A value may come back once the band is closed — that is the narrowing
+    // step doing its job — but the run must not spend its whole budget
+    // re-measuring the same shortlist.
+    const repeats = session.runs.length - new Set(session.runs.map((run) => run.sensitivity)).size
+    expect(repeats).toBeLessThanOrEqual(4)
+  })
+
+  it('measures a finalist again at most once before calling the tie', () => {
+    // The budget on the narrowing step: without it a closed band re-measures
+    // the same two or three values until MAX_ROUNDS.
+    const { session } = playRun({ width: 50, noise: 2.5, seed: 9 })
+    const counts = new Map()
+    for (const run of session.runs) {
+      counts.set(run.sensitivity, (counts.get(run.sensitivity) ?? 0) + 1)
+    }
+    for (const n of counts.values()) expect(n).toBeLessThanOrEqual(REVISIT_LIMIT + 1)
   })
 
   it('reports a tie rather than inventing a winner', () => {
     const { result } = playRun({ width: 50, noise: 2.5, seed: 9 })
     expect(Array.isArray(result.leaders)).toBe(true)
     if (result.tied) expect(result.leaders.length).toBeGreaterThan(1)
+  })
+
+  it('never hands back a list too long to choose from', () => {
+    // The regression this pins: the plausible set is a hypothesis set, so after
+    // an opening sweep it can hold most of the settings the run tried. Shown as
+    // "these seven are all the same, pick either" that is not a recommendation.
+    const { result } = playRun({ width: 50, noise: 2.5, seed: 9 })
+    expect(result.leaders.length).toBeLessThanOrEqual(3)
+    if (result.tied) {
+      for (const value of result.leaders) {
+        const point = result.history.find((entry) => entry.sensitivity === value)
+        expect(result.score - point.score).toBeLessThanOrEqual(TIE_BAND_KILLS)
+      }
+    }
+  })
+
+  it('spends rounds narrowing a wide tie instead of reporting it', () => {
+    // A run that stops with several values still level should have narrowed the
+    // field first: a resolved tie is a shortlist, and a shortlist is only worth
+    // printing once the rounds have actually been spent separating it.
+    const { session, result } = playRun({ width: 50, noise: 2.5, seed: 9 })
+    if (result.tied) {
+      const values = new Set(session.runs.map((run) => run.sensitivity))
+      expect(values.size).toBeLessThan(result.rounds)
+    }
   })
 
   it('exposes the plausible set as error bars, not a fixed band', () => {

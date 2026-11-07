@@ -52,6 +52,30 @@ export const CONFIRM_Z = 1.65
 export const MAX_ROUNDS = 30
 
 /**
+ * How many candidates the result page may present as "the same, pick either".
+ *
+ * The plausible set is a hypothesis set: with every setting played once its
+ * error bars are wide, so after five rounds it can legitimately hold five or
+ * six values. Reporting all of them is honest but useless — "these seven are
+ * all the same" is not a recommendation. A tie is only worth showing when it
+ * has been narrowed down, so the reported set is capped at the settings the
+ * data cannot separate from the leader *and* whose own round-average sits
+ * within this many kills of the leader's. Beyond it, the run says plainly that
+ * the field is still too close to call rather than handing back a list.
+ */
+export const TIE_BAND_KILLS = 1
+
+/**
+ * How many rounds a finalist gets before "still level" is the answer.
+ *
+ * A tie that survives one extra measurement per finalist is a real tie: the
+ * difference is under the noise the instrument can reach, and asking for a
+ * seventh round changes nothing. This is what stops the narrowing step from
+ * running to MAX_ROUNDS once the band is closed.
+ */
+export const REVISIT_LIMIT = 2
+
+/**
  * The smallest spacing worth a whole range run, as a fraction of eDPI.
  *
  * This is the search's horizon, and it is the one constant that decides whether
@@ -123,7 +147,7 @@ export function isDiscovery(mode) {
 }
 
 export const END_REASONS = Object.freeze({
-  resolved: '这几个数值表现几乎一样，挑手感最顺手的那个就行。',
+  resolved: '已经分不出高低的那几个数值，挑手感最顺手的那个就行。',
   confirmed: '最好的那个已经明显比其它都好，不必再测了。',
   noise: '再测下去也分不出差别了，就用现在这个。',
   ceiling: '几乎每轮都接近满分，这个难度已经分不出高低了。建议换更难的靶场重测。',
@@ -155,7 +179,7 @@ export function explainOutcome(session) {
     message: END_REASONS[reason] ?? END_REASONS[session.reason],
     // A discriminating run needs at least one setting that actually scored
     // away from the extremum; saying so is more useable than a bare number.
-    discriminating: Boolean(best) && !flatHigh && !flatLow,
+    discriminating: Boolean(best) && best.raw >= SATURATED_FLOOR + 1 && best.raw <= SATURATED_CEILING - 1,
   }
 }
 
@@ -420,6 +444,57 @@ export function plausible(pts, best) {
     const se = Math.hypot(best.se, point.se)
     return gap <= CONFIRM_Z * se
   })
+}
+
+/**
+ * The candidates the result page can honestly call "the same".
+ *
+ * Two conditions, and both are needed:
+ *
+ *  - **already narrowed.** Every round played so far must have been folded into
+ *    a live hypothesis. A set holding most of the sweep is not a tie, it is a
+ *    run that has not measured enough — changing the recommendation will not
+ *    fix that, so the run carries on instead of reporting it.
+ *  - **narrow enough to be actionable.** At most `maximum` settings, and each
+ *    within `band` kills of the leader's own measured average. Error bars alone
+ *    are too generous a gate: after a sweep of single rounds they can cover six
+ *    values whose averages differ by three kills. The band is the part a hand
+ *    can actually be asked to choose between; anything outside it is a
+ *    difference the data has already shown.
+ *
+ * Returns the leader first, then the rest by score. A single-element result is
+ * a clean answer, not a tie.
+ */
+export function tiedSet(pts, best, options = {}) {
+  if (!best) return []
+  const maximum = options.maximum ?? 3
+  const band = options.band ?? TIE_BAND_KILLS
+  const rest = plausible(pts, best)
+    .filter((point) => point.sensitivity !== best.sensitivity && best.raw - point.raw <= band)
+    .sort((a, b) => b.score - a.score)
+  // The winner plus at most `maximum - 1` challengers, and only when the field
+  // is small enough that handing it over is a choice rather than a data dump.
+  if (rest.length > maximum - 1) return [best]
+  return [best, ...rest]
+}
+
+/**
+ * The settings a run still has to separate, as opposed to the few it may report.
+ *
+ * This is the pool `revisit` draws from: everything the error bars cannot retire
+ * from the leader, whether or not the set is already small enough to print.
+ * Keeping the two ideas apart is what lets the stopping rule say "not narrowed
+ * yet, keep measuring inside these four" instead of "the set is too wide, so
+ * report the leader alone and pretend the question is settled".
+ */
+export function contenders(pts, best, options = {}) {
+  if (!best) return []
+  const maximum = options.maximum ?? 4
+  const band = options.band ?? TIE_BAND_KILLS
+  const pool = plausible(pts, best)
+    .filter((point) => point.sensitivity === best.sensitivity || best.raw - point.raw <= band)
+    .sort((a, b) => b.score - a.score)
+  return pool.slice(0, maximum)
 }
 
 /**
@@ -853,6 +928,14 @@ export function derive(session) {
 
   const start = session.setup.sens
   const vote = keepsVote(session, pts, best, alive, curve)
+  // What the result page would be allowed to call a tie, and the wider pool the
+  // run still has to separate. Computed before the stopping rules because both
+  // decide whether "stop and report" is a recommendation or a shrug: a narrow
+  // set is a result, a wide one is a run that has not measured enough yet.
+  const tied = tiedSet(pts, best)
+  const pool = contenders(pts, best)
+  const narrow = tied.length > 1
+  const open = pool.length > 1 && !narrow
 
   // The curve has run out of things to say: every candidate is already
   // measured, or the band is closed and the remaining spread is inside the
@@ -865,8 +948,25 @@ export function derive(session) {
     // without both, "the numbers are close" just means the run never went far
     // enough to find a difference.
     const closed = bracketed(pts, best, curve) && curve?.curvatureDown
+    // An open tie is not an answer yet. Once the shape is closed, fresh probes
+    // would only re-measure inside it, so the rounds are spent re-measuring the
+    // finalists — an extra round is what retires a challenger or promotes the
+    // leader. Without this a run could only report a tie as wide as the whole
+    // sweep, which is not something a player can choose from.
+    //
+    // The budget is finite on purpose: a tie that survives one extra round per
+    // finalist is a real tie, and asking again only repeats what the last round
+    // already said. Without the cap this branch re-measures the same shortlist
+    // until MAX_ROUNDS, which is exactly the endless loop the search exists to
+    // avoid — just wearing the opposite mask.
+    if (closed && open && best) {
+      const spent = pool.every((point) => point.n >= REVISIT_LIMIT)
+      if (spent) return finish(base, 'noise')
+      const again = revisit(pts, pool, best, session.setup.dpi)
+      return { ...base, proposal: again, plan: planFor(base, again) }
+    }
     if (closed && spread <= resolution && Number.isFinite(start)) {
-      return finish(base, alive.length > 1 ? 'resolved' : 'confirmed')
+      return finish(base, narrow ? 'resolved' : 'confirmed')
     }
   }
 
@@ -882,9 +982,34 @@ export function derive(session) {
   if (!proposal) {
     // No room to extend and no gap worth filling: the plausible set is the
     // honest answer, so report it as a tie rather than as a single number.
-    return finish(base, alive.length > 1 ? 'resolved' : 'resolution')
+    return finish(base, narrow ? 'resolved' : 'resolution')
   }
   return { ...base, proposal, plan: planFor(base, proposal) }
+}
+
+/**
+ * Which candidate to measure again.
+ *
+ * The one with the fewest rounds behind it, leader included: an extra round at
+ * a challenger is what can retire it, and an extra round at the leader is what
+ * can promote it. Ties go to the leader, so a run never looks like it is
+ * avoiding the number it is about to recommend.
+ *
+ * This is the only proposal allowed to repeat a measured value. Every other
+ * rule buys information about a place on the scale nobody has stood on; this
+ * one buys certainty about a place that is already a finalist, which is the
+ * thing a tie is short of.
+ */
+function revisit(pts, tied, best, dpi) {
+  const pool = tied.length ? tied : [best]
+  const target = [...pool].sort((a, b) => (a.n - b.n)
+    || (Number(b.sensitivity === best?.sensitivity) - Number(a.sensitivity === best?.sensitivity)))[0]
+  return {
+    sensitivity: target.sensitivity,
+    edpi: target.sensitivity * dpi,
+    why: 'revisit',
+    predicted: null,
+  }
 }
 
 /**
@@ -1003,6 +1128,7 @@ export function summarizeSession(session) {
   const pts = points(session.runs, { priorScore: globalPrior(session.runs) })
   const best = leader(pts, session.incumbent)
   const alive = plausible(pts, best)
+  const tied = tiedSet(pts, best)
   const outcome = explainOutcome(session)
   const history = pts.map((point) => ({
     sensitivity: point.sensitivity,
@@ -1020,10 +1146,14 @@ export function summarizeSession(session) {
     edpi: session.incumbent * session.setup.dpi,
     score: best?.raw ?? 0,
     rounds: session.runs.length,
-    // "Tied" is now a statement about the data: candidates whose error bars
-    // still overlap the leader, not candidates inside an arbitrary kill band.
-    tied: alive.length > 1,
-    leaders: alive.map((point) => point.sensitivity).sort((a, b) => a - b),
+    // "Tied" is a claim about the run, not about the error bars: it means the
+    // data cannot separate a few settings from the winner *and* those settings
+    // are close enough on their own averages that choosing between them by hand
+    // is the honest advice. `contested` keeps the wider truth — the field is
+    // still open — for the wording that has to say so.
+    tied: tied.length > 1,
+    leaders: tied.map((point) => point.sensitivity).sort((a, b) => a - b),
+    contested: alive.length > 1,
     reason: session.reason,
     message: outcome.message,
     outcomeReason: outcome.reason,
