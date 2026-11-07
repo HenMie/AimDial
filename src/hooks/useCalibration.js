@@ -3,7 +3,9 @@ import { completeEarly, createSession, recordKills, summarizeSession, undoLastRu
 import { saveDraft } from '../lib/storage.js'
 
 export function useCalibration(setup, id, initialSession, initialInput = '') {
-  const [session, setSession] = useState(() => initialSession ?? createSession(setup))
+  const [session, setSession] = useState(
+    () => initialSession ?? createSession(setup, { mode: setup.mode }),
+  )
   const [kills, setKills] = useState(initialInput)
   const [saveError, setSaveError] = useState(null)
   const [saved, setSaved] = useState(false)

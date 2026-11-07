@@ -26,7 +26,9 @@ export function saveDraft(id, session, input, storage = localStorage) {
   const draft = {
     id, algorithm: 'adaptive-local-v1', updatedAt: new Date().toISOString(),
     setup: session.setup, runs: session.runs, reason: session.reason, input,
-    options: { factors: session.factors, minGain: session.minGain },
+    // The mode decides the whole plan shape, so a draft without it cannot be
+    // rebuilt: a discovery run replayed as refine would resume at the wrong rung.
+    options: { mode: session.mode, factors: session.factors, minGain: session.minGain, pairs: session.pairs },
   }
   storage.setItem(KEY, JSON.stringify({ ...data, draft }))
   return draft
