@@ -1,4 +1,4 @@
-import { completeEarly, rebuildSession } from './rangeCalibration.js'
+import { ALGORITHM, completeEarly, rebuildSession } from './rangeCalibration.js'
 
 const KEY = 'aimdial.data.v2'
 const LEGACY_KEY = 'aimdial.history.v1'
@@ -15,8 +15,20 @@ export function loadData(storage = localStorage) {
   return { version: 2, draft: null, history }
 }
 
+/**
+ * Restore an in-progress run.
+ *
+ * The draft stores only the rounds; the plan is re-derived from them. That is
+ * possible — and correct — precisely because the search is a pure function of
+ * `setup + runs`, so a restored session resumes on exactly the setting the
+ * algorithm would have proposed had the tab never been closed.
+ *
+ * Drafts from an older algorithm are refused rather than replayed: the rounds
+ * mean something different to a search that no longer walks a fixed ladder, and
+ * silently replaying them would present a value the current rules never chose.
+ */
 export function restoreDraft(draft) {
-  if (draft.algorithm !== 'adaptive-local-v1') throw new Error('测试进度的算法版本不兼容。')
+  if (draft.algorithm !== ALGORITHM) throw new Error('测试进度的算法版本不兼容，请重新开始。')
   const restored = rebuildSession(draft.setup, draft.runs, draft.options)
   return draft.reason === 'manual' ? completeEarly(restored) : restored
 }
@@ -24,11 +36,12 @@ export function restoreDraft(draft) {
 export function saveDraft(id, session, input, storage = localStorage) {
   const data = loadData(storage)
   const draft = {
-    id, algorithm: 'adaptive-local-v1', updatedAt: new Date().toISOString(),
+    id, algorithm: ALGORITHM, updatedAt: new Date().toISOString(),
     setup: session.setup, runs: session.runs, reason: session.reason, input,
-    // The mode decides the whole plan shape, so a draft without it cannot be
-    // rebuilt: a discovery run replayed as refine would resume at the wrong rung.
-    options: { mode: session.mode, factors: session.factors, minGain: session.minGain, pairs: session.pairs },
+    // The mode decides what the run was allowed to know at the start — refine
+    // has a starting value, discovery deliberately does not — so a draft
+    // without it cannot be rebuilt.
+    options: { mode: session.mode },
   }
   storage.setItem(KEY, JSON.stringify({ ...data, draft }))
   return draft

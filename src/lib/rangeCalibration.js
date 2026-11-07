@@ -1,55 +1,101 @@
-export const BOTS_PER_RUN = 30
-// A step is a fixed distance in cm/360°, not a fixed percentage of the current
-// value. With the 0.07 deg/count yaw constant, cm/360 = 13062.86 / eDPI, so one
-// "hand step" delta in eDPI corresponds to a constant number of centimetres and
-// to the ratio LADDER_ANCHOR / (LADDER_ANCHOR - delta).
-//
-// Why absolute: the same ratio is a different move in the hand. On the real pro
-// population below, the old fixed ×1.25 step meant 10.9 cm of 360° at the median
-// player and 16.3 cm at p90 — well past anything a player can feel as "one
-// step" — while a 1.12 step was 5.8 cm and a 1.06 step 3.1 cm. One ladder cannot
-// be right in all three cases; fixing the physical distance can.
-//
-// The anchor sits at the centre of the pro distribution. Measured 2026-11-07
-// from ValorantHub's 540 published pro setups: median 240 eDPI, mean 252, p25
-// 192, p75 280, p10 160, p90 344. At anchor 250 the first rung is 5.9 cm of 360
-// at 200 eDPI and 3.0 cm at 400 — and 94% of those 540 players land inside a
-// 2–8 cm first step, against 12% under the old ×1.25 ladder.
-// Source: https://valoranthub.com/proplayers (checked 2026-10-27).
-export const LADDER_ANCHOR = 250
-// Hand-step ladder as eDPI deltas at the anchor: 20 → 10 → 5 → 2.5 eDPI is
-// 4.35 cm of 360 at the anchor down to 0.54 cm, a coarse scan then three
-// refinements. The finest rung is still 0.7 eDPI of travel at the lowest plausible
-// eDPI, comfortably above the game's 0.001-sensitivity quantum.
-export const STEP_DELTAS = Object.freeze([20, 10, 5, 2.5])
-// Widest first step the ladder may ever ask for. The pro band spans roughly
-// 100–450 eDPI, so a 25% move cannot leave it; this only binds for setups far
-// below the band, where an absolute step would otherwise overshoot wildly.
-export const MAX_FIRST_STEP = 1.25
-export const MIN_MEAN_GAIN = 1
 /**
- * Interleaved repeat length: each confirmation is `CONFIRM_PAIRS` pair
- * comparisons (6 rounds at the default), which is what lets it catch noise
- * without stretching every accepted step into eight range runs. Two pairs makes
- * a false move happen roughly twice as often at the same noise level, so the
- * extra two rounds buy the result its credibility.
+ * Adaptive sensitivity search for a 30-bot medium range run.
+ *
+ * The instrument is one number per round: how many of the 30 bots you killed.
+ * Everything else here follows from what that number can and cannot tell you.
+ *
+ * 1. Every round is noisy. With a hit rate near 0.8 the count has a standard
+ *    deviation around 2.4 kills, so a one-kill difference is a coin flip. Any
+ *    decision rule that reacts to a gap smaller than that noise will keep
+ *    reacting to noise forever — that is exactly what an earlier version of
+ *    this file did, and why a run could circle the same four values.
+ *
+ * 2. So the state is not "which rung are we on". It is a running estimate of
+ *    the response curve: for every sensitivity you have played, the mean of
+ *    *all* its kills with a shrinkage prior, plus a standard error that shrinks
+ *    as rounds accumulate. Rounds are never thrown away and every decision is
+ *    re-derived from the full history.
+ *
+ * 3. The next sensitivity is chosen for its informational value: the point on
+ *    the fitted curve that is best, or still could be, and is not already
+ *    known. That gives a continuous proposal — three decimals, not one of four
+ *    rungs — and it never repeats itself, because a sensitivity already played
+ *    is already known.
+ *
+ * 4. Stopping is a statement about resolution, not about running out of rungs:
+ *    stop when the plausible-best range cannot be told apart from the leader at
+ *    the noise level this test can actually reach.
  */
-export const CONFIRM_PAIRS = 3
-export const CONFIRM_ROUNDS = CONFIRM_PAIRS * 2
+
+export const BOTS_PER_RUN = 30
 
 /**
- * Two ways to run the same instrument.
+ * Kill-count noise. Modelled as binomial over 30 bots at p ≈ 0.8, which gives
+ * sd = sqrt(30 · 0.8 · 0.2) ≈ 2.19. Used at p = 0.75 for a slightly
+ * conservative 2.4, since the few-kill end of the range is noisier than the
+ * mean suggests and a pessimistic sigma is the safe direction for a stopping
+ * rule.
+ */
+export const SIGMA_KILLS = 2.4
+
+/**
+ * Shrinkage weight, in "rounds" of prior. A sensitivity played once keeps most
+ * of its own score; one played five times is trusted almost entirely on its own
+ * data. Without this, a single lucky 30 would outrank a well-measured 27.
+ */
+export const PRIOR_ROUNDS = 1.5
+
+/** One-sided 95% confidence: how many standard errors a gap must clear. */
+export const CONFIRM_Z = 1.65
+
+/** Soft cap on range runs. Reaching it never invents a result, it just stops. */
+export const MAX_ROUNDS = 30
+
+/**
+ * The smallest spacing worth a whole range run, as a fraction of eDPI.
  *
- * `refine` is the original mode: the player already has a sensitivity they trust
- * and only wants the step around it settled. The ladder is anchored on their own
- * eDPI, so every rung is a small, feelable move and the search converges locally.
+ * This is the search's horizon, and it is the one constant that decides whether
+ * a run explores or merely polishes. Too small and every proposal lands beside
+ * the last one — the search looks busy, learns nothing about the shape of the
+ * curve, and reports the starting point as the answer because it never went
+ * anywhere else. Two probes closer than this are also not a difference a hand
+ * can feel, so the round is wasted regardless.
  *
- * `discover` is for a player with no trustworthy starting point. Anchoring the
- * ladder on their eDPI would be wrong — that value is the thing in doubt — so it
- * anchors on the population centre instead and widens outward: measure the centre,
- * then probe progressively further until performance clearly falls off on both
- * sides. Only once that broad bracket exists does it switch to the fine ladder
- * around the winner.
+ * 6% is roughly one ladder rung: big enough that the curve is visibly sampled
+ * across the plausible band, small enough to stay inside a bracket that a peak
+ * could be in.
+ */
+export const MIN_PROBE_GAP = 0.06
+
+/**
+ * How many rungs of coverage the opening sweep buys on each side of the
+ * starting value: `[down, up]`. Two each way plus the start is five rounds, the
+ * minimum that can show a rise, a peak and a fall across the band. After that
+ * the fitted curve chooses, and the layout rule is finished for good.
+ *
+ * A fixed budget rather than "keep filling the thin side": left to decide for
+ * itself, a coverage rule on a one-sided landscape keeps picking the same side
+ * and walks to the floor of the playable range — the original runaway wearing a
+ * new name. A symmetrical budget cannot do that.
+ */
+export const LAYOUT_STEPS = Object.freeze([3, 3])
+
+/**
+ * How many measured settings each side needs for the saturation check to be
+ * allowed to fire: a claim about the whole band needs a band, not a point.
+ */
+export const LAYOUT_SIDES = 2
+
+/** Below/above these the player is outside anything a human plays at. */
+export const EDPI_FLOOR = 80
+export const EDPI_CEILING = 1200
+
+/** The centre of the published pro population; used only as a weak prior. */
+export const LADDER_ANCHOR = 250
+
+/**
+ * The two ways a run can be framed. Both use the same estimator and the same
+ * proposal rule; the difference is only what is known before round one.
  */
 export const MODES = Object.freeze({
   refine: {
@@ -76,40 +122,79 @@ export function isDiscovery(mode) {
   return mode === 'discover'
 }
 
-/** Widening ladder used by discovery mode, as eDPI multipliers from the centre. */
-export const DISCOVER_FACTORS = Object.freeze([1.35, 1.9, 2.65])
-/** Below/above these the player is outside anything a human plays at. */
-export const EDPI_FLOOR = 80
-export const EDPI_CEILING = 1200
-/**
- * How far the band may walk from where it started before the run stops and says
- * so. Each rung is only worth 1-2 kills, so an uncapped walk can chain dozens of
- * rounds on noise alone; at 1.6× the starting eDPI the player is clearly outside
- * "refine what I have" and needs a fresh start, not more rounds.
- */
-export const TRAVEL_CAP = 0.6
-export const MAX_TRAVEL_STEPS = 6
+export const END_REASONS = Object.freeze({
+  resolved: '这几个数值表现几乎一样，挑手感最顺手的那个就行。',
+  confirmed: '最好的那个已经明显比其它都好，不必再测了。',
+  noise: '再测下去也分不出差别了，就用现在这个。',
+  ceiling: '几乎每轮都接近满分，这个难度已经分不出高低了。建议换更难的靶场重测。',
+  floor: '几乎每轮都只有 0–1 杀，测试条件可能有问题，请检查后再测。',
+  manual: '你提前结束了，结果取目前表现最好的那个。',
+  edge: '已经调到正常人不会用的极端数值，就此停下。',
+  resolution: '游戏灵敏度最小只能改到 0.001，再细也分不出来了。',
+})
 
 /**
- * Multiplicative ladder equivalent to STEP_DELTAS at `anchorEdpi`.
- * Exported so the UI's diagrams state the same numbers the search uses.
+ * How the run ended, in the terms the result page needs.
  *
- * A delta larger than the anchor would invert the factor, which only happens for
- * a player far below the pro band. There the rungs compress instead of silently
- * producing a factor of 1 or less: the coarse rung is capped at MAX_FIRST_STEP
- * (outside the whole plausible range, so it is always a safe place to look) and
- * the rest subdivide down to it geometrically. The ladder is strictly shrinking
- * for every setup.
+ * A run that finishes with every setting near 30 has technically resolved — the
+ * numbers cannot be told apart — but the useful thing to say is not "pick any
+ * of them", it is "this difficulty is not discriminating for you". So a
+ * resolved run whose whole band sits at the ceiling is reported as a ceiling,
+ * with its own advice.
  */
+export function explainOutcome(session) {
+  const pts = points(session.runs, { priorScore: globalPrior(session.runs) })
+  const best = leader(pts, session.incumbent)
+  const flatHigh = pts.length >= 3 && pts.every((point) => point.raw >= SATURATED_CEILING)
+  const flatLow = pts.length >= 3 && pts.every((point) => point.raw <= SATURATED_FLOOR)
+  let reason = session.reason
+  if ((reason === 'resolved' || reason === 'confirmed') && flatHigh) reason = 'ceiling'
+  if ((reason === 'resolved' || reason === 'confirmed') && flatLow) reason = 'floor'
+  return {
+    reason,
+    message: END_REASONS[reason] ?? END_REASONS[session.reason],
+    // A discriminating run needs at least one setting that actually scored
+    // away from the extremum; saying so is more useable than a bare number.
+    discriminating: Boolean(best) && !flatHigh && !flatLow,
+  }
+}
+
+export function parseKills(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new RangeError(`击杀数需为 0–${BOTS_PER_RUN} 的整数。`)
+  }
+  if (String(value).trim() === '') throw new RangeError('请填写本轮击杀数。')
+  const kills = Number(value)
+  if (!Number.isInteger(kills) || kills < 0 || kills > BOTS_PER_RUN) {
+    throw new RangeError(`击杀数需为 0–${BOTS_PER_RUN} 的整数。`)
+  }
+  return kills
+}
+
+/** Round a sensitivity to the game's own resolution. */
+export const quantize = (sensitivity) => Number(sensitivity.toFixed(3))
+
+const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length
+
+/**
+ * Step spacing in eDPI at the population anchor: 20 / 10 / 5 / 2.5.
+ *
+ * The search no longer walks a ladder of these — it proposes continuous values
+ * — but the method page draws its first bracket from them, and the tests pin
+ * the "one feelable hand movement" property that motivated them, so they stay
+ * exported as the description of what a first step should feel like.
+ */
+export const STEP_DELTAS = Object.freeze([20, 10, 5, 2.5])
+
 export function stepFactors(anchorEdpi = LADDER_ANCHOR, deltas = STEP_DELTAS) {
   if (!Number.isFinite(anchorEdpi) || anchorEdpi <= 0) throw new RangeError('锚点 eDPI 必须大于 0。')
   let factors
   if (anchorEdpi > Math.max(...deltas)) {
     factors = deltas.map((delta) => anchorEdpi / (anchorEdpi - delta))
   } else {
-    // Anchor too small for the absolute steps: a capped geometric ladder.
+    // Anchor too small for absolute steps: a capped geometric ladder instead.
     const n = deltas.length
-    factors = deltas.map((_, index) => MAX_FIRST_STEP ** ((n - index) / n))
+    factors = deltas.map((_, index) => 1.25 ** ((n - index) / n))
   }
   if (!factors.every((factor, index) => factor > 1 && (index === 0 || factor < factors[index - 1]))) {
     throw new RangeError('步长梯度必须严格递减且大于 1。')
@@ -117,318 +202,554 @@ export function stepFactors(anchorEdpi = LADDER_ANCHOR, deltas = STEP_DELTAS) {
   return factors
 }
 
-/**
- * The eDPI the fine ladder is calibrated against.
- *
- * In `refine` that is the player's own eDPI: their value is trusted and every
- * rung should be a small move from it. In `discover` it deliberately is NOT —
- * their value is exactly what is in doubt — so the fine ladder waits until the
- * sweep has found a band, and anchors on whatever won the sweep.
- */
 export function ladderAnchor(setup, mode = DEFAULT_MODE) {
   if (isDiscovery(mode)) return LADDER_ANCHOR
   const edpi = Number(setup?.dpi) * Number(setup?.sens)
   return Number.isFinite(edpi) && edpi > 0 ? edpi : LADDER_ANCHOR
 }
 
-/** The fine ladder for a setup in a given mode. */
 export function ladderFor(setup, mode = DEFAULT_MODE) {
-  // A discovery session re-anchors its ladder on whatever the sweep won with, so
-  // the anchor is carried on the session rather than recomputed from the start
-  // value (which is the untrusted number).
   if (setup?.anchorEdpi) return stepFactors(setup.anchorEdpi)
   return stepFactors(ladderAnchor(setup, mode))
 }
 
-/**
- * How wide the first step is for a given setup, as the percentage of the player's
- * own sensitivity that the outside candidates sit at. The UI states this instead
- * of a fixed "×1.25" because the point of the ladder is that it is not fixed.
- */
 export function stepPercent(setup, mode = DEFAULT_MODE) {
   const factor = ladderFor(setup, mode)[0]
   return Math.round((factor - 1) * 1000) / 10
 }
 
-/** The whole ladder as percentages, coarse to fine. */
 export function ladderPercents(setup, mode = DEFAULT_MODE) {
   return ladderFor(setup, mode).map((factor) => Math.round((factor - 1) * 1000) / 10)
 }
 
-/**
- * The eDPI a discovery run sweeps through, widest bracket last.
- *
- * The sweep is symmetric in eDPI around the population centre: each rung is the
- * centre multiplied by a factor and by its reciprocal, so the candidate set is
- * `[250, 337, 475, 662, 185, 132, 94]` at any DPI. Symmetry matters because a
- * player's true value is equally likely to be below or above the centre, and
- * sweeping one side first would make the search depend on a guess.
- *
- * Rungs outside `[EDPI_FLOOR, EDPI_CEILING]` are dropped: nobody plays there, and
- * asking for them wastes a range run on a score that only says "too slow".
- */
-export function discoverRungs(dpi) {
-  if (!Number.isFinite(dpi) || dpi <= 0) throw new RangeError('DPI 必须大于 0。')
-  const sens = (edpi) => quantize(edpi / dpi)
-  const factors = [1, ...DISCOVER_FACTORS.flatMap((f) => [f, 1 / f])]
-  const edpiRungs = factors
-    .map((factor) => LADDER_ANCHOR * factor)
-    .filter((edpi) => edpi >= EDPI_FLOOR && edpi <= EDPI_CEILING)
-    .map((edpi) => Math.round(edpi * 10) / 10)
-  const candidates = [...new Set(edpiRungs.map(sens))].filter((value) => value > 0).sort((a, b) => a - b)
-  const centre = sens(LADDER_ANCHOR)
-  return {
-    centre,
-    candidates,
-    edpiRungs,
-    above: candidates.filter((value) => value > centre),
-    below: candidates.filter((value) => value < centre),
-  }
+/** The opening bracket, ascending: your value, and one step either side. */
+export function openingSchedule(setup, mode = DEFAULT_MODE) {
+  const start = quantize(Number(setup.sens))
+  if (!Number.isFinite(start) || start <= 0) return []
+  const factor = ladderFor(setup, mode)[0]
+  return [...new Set([quantize(start / factor), start, quantize(start * factor)])]
+    .filter((value) => value > 0)
+    .sort((a, b) => a - b)
 }
 
-export const END_REASONS = Object.freeze({
-  plateau: '更小的步长没有带来稳定提升，保留当前档位。',
-  resolution: '按三位小数取整后，附近档位已无法进一步区分。',
-  ceiling: '各档位均达到 29–30 杀，中等难度接近满分，区分能力不足。',
-  floor: '各档位均只有 0–1 杀，当前测试不足以区分灵敏度，请先确认测试条件。',
-  manual: '你已提前结束；结果取当前基准或最近一次通过复查的档位。',
-  edge: '已经挪到正常人不会使用的灵敏度上限/下限，就此停止。',
-  runaway: '越测越偏、一直没有出现更差的档位：说明起点离真正合适的地方太远，建议改用「第一次找灵敏度」重测。',
-})
-
-export function parseKills(value) {
-  if (typeof value !== 'number' && typeof value !== 'string') {
-    throw new RangeError('击杀数需为 0–30 的整数。')
-  }
-  if (String(value).trim() === '') throw new RangeError('请填写本轮击杀数。')
-  const kills = Number(value)
-  if (!Number.isInteger(kills) || kills < 0 || kills > BOTS_PER_RUN) {
-    throw new RangeError('击杀数需为 0–30 的整数。')
-  }
-  return kills
-}
-
-const quantize = (sensitivity) => Number(sensitivity.toFixed(3))
-const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length
+// ---------------------------------------------------------------------------
+// Estimator
+// ---------------------------------------------------------------------------
 
 /**
- * One screening round: the incumbent plus the rung below and the rung above.
+ * The measured response curve, rebuilt from every round ever played.
  *
- * The incumbent is always measured in the same block as its neighbours, so the
- * comparison is between settings the player just played rather than against a
- * stale score. When the ladder has run out of rungs on one side — which happens
- * as soon as the finest rung is in play — the block falls back to the incumbent
- * plus whatever side still exists.
+ * Each sensitivity gets its own score. Neighbouring sensitivities are *not*
+ * smoothed into one curve: a player's response has a peak of finite width, and
+ * fitting a single global shape across it is how a search talks itself into
+ * walking past the optimum. The neighbours are used for the shape judgement
+ * (is the leader bracketed?) and for choosing the next probe.
+ *
+ * Every point carries `se`, the standard error of its adjusted mean. It is what
+ * makes "these two are 1.5 kills apart" a statement that can be wrong, and what
+ * lets the stopping rule be about resolution instead of round count.
  */
-function screenPlan(session, message) {
-  const factor = session.factors[session.level]
-  const base = session.incumbent
-  const candidates = [...new Set([quantize(base / factor), base, quantize(base * factor)])]
-    .filter((value) => value > 0).sort((a, b) => a - b)
-  const neighbors = candidates.filter((value) => value !== base)
-  if (session.decisions.length % 2) neighbors.reverse()
-  return {
-    phase: 'screen', baseline: base, candidates, schedule: [base, ...neighbors],
-    cursor: 0, start: session.runs.length, message,
+export function points(runs, options = {}) {
+  const priorRounds = options.priorRounds ?? PRIOR_ROUNDS
+  const priorScore = options.priorScore ?? null
+  const grouped = new Map()
+  for (const run of runs) {
+    const key = quantize(run.sensitivity)
+    const entry = grouped.get(key) ?? []
+    entry.push(run.kills)
+    grouped.set(key, entry)
   }
+  return [...grouped.entries()]
+    .map(([sensitivity, kills]) => {
+      const n = kills.length
+      const raw = mean(kills)
+      // Empirical-Bayes style shrinkage towards the grand mean, so a single
+      // lucky round cannot outrank a sensitivity that has been measured five
+      // times. `priorScore === null` means there is nothing to shrink towards.
+      const base = priorScore ?? raw
+      return {
+        sensitivity,
+        kills,
+        n,
+        raw,
+        score: (raw * n + base * priorRounds) / (n + priorRounds),
+        se: SIGMA_KILLS / Math.sqrt(n + priorRounds),
+      }
+    })
+    .sort((a, b) => a.sensitivity - b.sensitivity)
+}
+
+/** Mean of every kill recorded so far: the prior the shrinkage pulls towards. */
+function globalPrior(runs) {
+  if (!runs.length) return null
+  return mean(runs.map((run) => run.kills))
 }
 
 /**
- * Walk the incumbent one rung along the ladder in `direction`.
+ * The curve as a shape, not just as a list of measured points.
  *
- * This is what lets the ladder actually travel. Without it the search can only
- * ever consider rungs that land *near* the starting value: the fine ladder is
- * built around the incumbent, so a true optimum a factor of two away is invisible
- * and every round simply narrows in place until it reports a plateau at the
- * starting point. Travelling keeps the "one feelable step at a time" property
- * while still allowing the band to move as far as the player needs.
+ * Kills per round is a unimodal function of log-sensitivity: there is a band
+ * where hand and wrist agree, and the score falls away on both sides for
+ * different reasons (too twitchy misses leave late, too slow misses leave
+ * short). Fitting that shape is what lets the search say something about a
+ * sensitivity nobody has played yet — and, more importantly, it is what stops
+ * a run of rising scores at a truncated edge from being read as "still
+ * climbing" when the real explanation is that the whole measured band sits at
+ * the ceiling.
  *
- * Travel is capped: once the band has walked further than TRAVEL_CAP eDPI from
- * where it started, the player is being steered a long way by 1-kill margins and
- * the honest answer is to stop and say so rather than keep burning range runs.
+ * The shape fitted is a parabola in log-sensitivity, fitted on the logit of the
+ * kills so the far side cannot climb past 30 bots. Parabolic-in-log is the same
+ * family the response was measured to have: equal ratio steps produce equal
+ * score changes, and the peak is a single number rather than an interval.
+ *
+ * Fitted by reweighted least squares with weights proportional to rounds. The
+ * unit of evidence is a range run, so a setting played four times counts four
+ * times — that is the "综合之前的各次成绩" property, and it is why the fit gets
+ * sharper with every round instead of jittering with each new score.
+ *
+ * Returns null when there is not enough shape to fit; callers then fall back to
+ * the measured points alone.
  */
-function travelPlan(session, direction) {
-  const factor = session.factors[session.level]
-  const current = session.incumbent
-  const next = quantize(direction === 'up' ? current * factor : current / factor)
-  const edpi = next * session.setup.dpi
-  if (!(next > 0) || edpi < EDPI_FLOOR || edpi > EDPI_CEILING) return finish(session, 'edge')
-  if (next === current) return finish(session, 'resolution')
-
-  const origin = session.travelOrigin ?? current * session.setup.dpi
-  const steps = session.travelSteps ?? 0
-  // The cap is a ratio of the starting eDPI, not an absolute difference: what
-  // matters is "this is now a different sensitivity", which is scale-free.
-  const walked = Math.abs(Math.log(edpi / origin))
-  if (walked > Math.log(1 + TRAVEL_CAP) || steps >= MAX_TRAVEL_STEPS) {
-    return finish({ ...session, travelSteps: steps }, 'runaway')
+export function fitCurve(pts) {
+  if (pts.length < 3) return null
+  const scale = BOTS_PER_RUN + 1
+  const clampProb = (p) => Math.min(1 - 1e-3, Math.max(1e-3, p))
+  const logit = (kills) => {
+    const p = clampProb((kills + 0.5) / scale)
+    return Math.log(p / (1 - p))
   }
 
-  const moved = { ...session, incumbent: next, travelSteps: steps + 1, travelOrigin: origin }
-  const arrow = direction === 'up' ? '往高' : '往低'
+  const xs = pts.map((point) => Math.log(point.sensitivity))
+  const xBar = pts.reduce((sum, point, index) => sum + xs[index] * point.n, 0)
+    / pts.reduce((sum, point) => sum + point.n, 0)
+  const rows = pts.map((point, index) => ({ u: xs[index] - xBar, y: logit(point.raw), w: point.n }))
+
+  // Intercept, linear and quadratic terms of logit(kills) in log-sensitivity.
+  // Solved with a few rounds of IRLS so a point at 30/30 does not dominate.
+  const theta = [logit(mean(pts.map((point) => point.raw))), 0, 0]
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    const normal = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    const rhs = [0, 0, 0]
+    for (const row of rows) {
+      const basis = [1, row.u, row.u * row.u]
+      const p = 1 / (1 + Math.exp(-(theta[0] * basis[0] + theta[1] * basis[1] + theta[2] * basis[2])))
+      const w = row.w * Math.max(0.02, p * (1 - p))
+      for (let i = 0; i < 3; i += 1) {
+        rhs[i] += w * basis[i] * row.y
+        for (let j = 0; j < 3; j += 1) normal[i][j] += w * basis[i] * basis[j]
+      }
+    }
+    const next = solve3(normal, rhs)
+    if (!next) return null
+    const moved = next.reduce((sum, value, index) => sum + Math.abs(value - theta[index]), 0)
+    for (let i = 0; i < 3; i += 1) theta[i] = next[i]
+    if (moved < 1e-8) break
+  }
+  if (theta.some((value) => !Number.isFinite(value))) return null
+
+  const [c0, c1, c2] = theta
+  const toLogit = (sensitivity) => c0 + c1 * (Math.log(sensitivity) - xBar) + c2 * (Math.log(sensitivity) - xBar) ** 2
+  const toScore = (sensitivity) => scale / (1 + Math.exp(-toLogit(sensitivity))) - 0.5
+
+  // Guard the peak. A quadratic through five points is a fragile object: on a
+  // band that is monotone in the data, the fitted curvature is tiny and the
+  // implied peak lands thousands of eDPI away, which would send the search off
+  // to the ceiling. The peak is therefore only believed when it falls inside
+  // the span the points actually cover — extrapolating a peak beyond the
+  // measured range is not a prediction, it is an accident of the algebra.
+  const xLow = Math.min(...xs)
+  const xHigh = Math.max(...xs)
+  const spanLog = xHigh - xLow
+  const rawPeakLog = c2 < 0 ? xBar - c1 / (2 * c2) : null
+  const inside = rawPeakLog != null
+    && Number.isFinite(rawPeakLog)
+    && rawPeakLog > xLow - spanLog
+    && rawPeakLog < xHigh + spanLog
+  // How strongly the fitted shape turns, normalised so it does not depend on the
+  // scale of log-sensitivity: this is what tells a real peak from a straight
+  // line that the solver happened to bend by a rounding error.
+  const curvature = c2 * spanLog * spanLog
+  const curvatureDown = c2 < 0 && curvature < -0.05
+  const peakLog = inside && curvatureDown ? rawPeakLog : null
+  const optimum = peakLog != null ? Math.exp(peakLog) : null
+
   return {
-    ...moved,
-    plan: screenPlan(moved, `外侧档稳定更好，${arrow}挪一格到 ${next.toFixed(3)} 继续比较。`),
+    toScore,
+    toLogit,
+    optimum,
+    curvatureDown,
+    peakScore: optimum ? toScore(optimum) : null,
   }
 }
 
-function finish(session, reason) {
-  return { ...session, done: true, reason }
+/** Solve a 3x3 system by Cramer's rule; null when it is singular. */
+function solve3(m, v) {
+  const det = (a) => a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+    - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+    + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+  const d = det(m)
+  if (!Number.isFinite(d) || Math.abs(d) < 1e-12) return null
+  const replace = (column) => m.map((row, index) => row.map((value, j) => (j === column ? v[index] : value)))
+  const result = [det(replace(0)) / d, det(replace(1)) / d, det(replace(2)) / d]
+  return result.every((value) => Number.isFinite(value)) ? result : null
+}
+
+/** Best-scoring measured point; ties break towards the incumbent. */
+export function leader(pts, incumbent) {
+  if (!pts.length) return null
+  return [...pts].sort((a, b) => {
+    if (Math.abs(b.score - a.score) > 1e-9) return b.score - a.score
+    if (a.sensitivity === incumbent) return -1
+    if (b.sensitivity === incumbent) return 1
+    return a.sensitivity - b.sensitivity
+  })[0]
 }
 
 /**
- * Discovery sweep: one round at every rung, interleaved from the centre outward.
+ * The set of sensitivities that could still be the true best.
  *
- * Ordering matters. Walking up then down would let a warm-up trend hand the win
- * to one end of the range, so the schedule alternates sides and starts at the
- * centre — the value the population says is most likely to be near the truth.
- * The whole sweep is one comparison block: the best rung becomes the incumbent
- * and the fine ladder then refines around it.
+ * A point drops out as soon as the leader beats it by more than CONFIRM_Z
+ * standard errors of the difference. That is what lets the search stop on its
+ * own: as rounds accumulate the error bars shrink, the plausible set narrows,
+ * and it eventually collapses without anyone declaring a plateau by hand.
  */
-function sweepPlan(session, message) {
-  const { centre, candidates } = discoverRungs(session.setup.dpi)
-  const above = candidates.filter((value) => value > centre)
-  const below = candidates.filter((value) => value < centre).reverse()
-  const order = [centre]
-  for (let i = 0; i < Math.max(above.length, below.length); i += 1) {
-    if (above[i] != null) order.push(above[i])
-    if (below[i] != null) order.push(below[i])
-  }
-  const schedule = order.filter((value) => value > 0)
-  if (schedule.length < 2) return finish({ ...session, plan: null }, 'resolution')
-  return {
-    ...session,
-    plan: {
-      phase: 'sweep', baseline: session.incumbent ?? schedule[0], candidates: schedule,
-      schedule, cursor: 0, start: session.runs.length, message,
-    },
-  }
-}
-
-/**
- * Interleaved repeat against the incumbent.
- *
- * Each pair is one challenger round and one base round, and the opening setting
- * flips every pair, which is the ABBA / BAAB pattern at two pairs and
- * ABBA-BAAB at three. Because the opening setting alternates, a warm-up or a
- * fatigue slide cannot favour one setting across the whole block; because every
- * pair holds one round of each, a pair's difference is directly comparable
- * between pairs.
- */
-function confirmPlan(session, base, challenger) {
-  const a = base
-  const b = challenger
-  const pairs = session.pairs
-  const opensWithChallenger = session.confirmations % 2 === 1
-  const order = []
-  for (let pair = 0; pair < pairs; pair += 1) {
-    const challengerFirst = (pair % 2 === 0) === opensWithChallenger
-    order.push(challengerFirst ? b : a, challengerFirst ? a : b)
-  }
-  return {
-    phase: 'confirm', baseline: a, challenger: b, candidates: [a, b], schedule: order,
-    cursor: 0, start: session.runs.length, pairs,
-    message: `${b.toFixed(3)} 初测领先，接下来与 ${a.toFixed(3)} 交错复测 ${order.length} 轮确认；单次高分不会直接替换当前档位。`,
-  }
-}
-
-function narrow(session) {
-  if (session.level === session.factors.length - 1) return finish(session, 'plateau')
-  const next = { ...session, level: session.level + 1 }
-  const plan = screenPlan(next, '未发现稳定提升，保留当前档位，缩小步长后继续测试。')
-  if (plan.candidates.length === 1) return finish({ ...next, plan }, 'resolution')
-  return { ...next, plan }
-}
-
-function blockSummary(session) {
-  const recent = session.runs.slice(session.plan.start)
-  return session.plan.candidates.map((sensitivity) => {
-    const kills = recent.filter((run) => run.sensitivity === sensitivity).map((run) => run.kills)
-    if (!kills.length) throw new Error('当前比较组缺少成绩。')
-    return { sensitivity, kills, score: mean(kills) }
+export function plausible(pts, best) {
+  if (!best) return []
+  return pts.filter((point) => {
+    const gap = best.score - point.score
+    const se = Math.hypot(best.se, point.se)
+    return gap <= CONFIRM_Z * se
   })
 }
 
-function advance(session) {
-  const plan = session.plan
-  const entries = blockSummary(session)
+/**
+ * Is the leader bracketed — measurably lower on one side, lower on the other?
+ *
+ * Without a bracket the top of the measured range can only be a slope, and
+ * walking along a slope is how a search leaves everything sensible behind.
+ *
+ * Two ways to earn a bracket, because the measured points alone are a weak
+ * instrument: either the neighbouring measured points are lower (each compared
+ * against its own error bar), or the fitted curve from `fitCurve` is falling on
+ * both sides of the leader. The second is what lets a run stop after sampling a
+ * band without having to re-play every neighbour — the fit has already used
+ * every round ever played to decide the shape.
+ */
+export function bracketed(pts, best, curve = null) {
+  if (!best) return false
+  const below = pts.filter((point) => point.sensitivity < best.sensitivity)
+  const above = pts.filter((point) => point.sensitivity > best.sensitivity)
+  if (!below.length || !above.length) return false
 
-  // Discovery sweep finished: the best rung becomes the incumbent and the fine
-  // ladder takes over around it. No confirmation is needed here — this block is
-  // itself the repeat, because every rung was measured once and the winner is
-  // then re-measured by the ladder's own screen round.
-  if (plan.phase === 'sweep') {
-    const best = [...entries].sort((a, b) => b.score - a.score)[0]
-    const decision = { phase: 'sweep', level: 0, baseline: best.sensitivity, entries, winner: best.sensitivity }
-    // The fine ladder must re-anchor on the winner: the sweep's own anchor was the
-    // population centre, which is only a starting guess. Anything else would run
-    // the refinement around a value the sweep just rejected.
-    const factors = stepFactors(best.sensitivity * session.setup.dpi)
-    const swept = {
-      ...session, incumbent: best.sensitivity, factors, latestComparison: entries,
-      decisions: [...session.decisions, decision],
-    }
-    const plan = screenPlan(swept, `${best.sensitivity.toFixed(3)} 在粗扫中最好，围绕它开始细调。`)
-    return { ...swept, plan }
-  }
+  const lowerWorse = Math.max(...below.map((point) => point.score))
+    <= best.score + CONFIRM_Z * Math.hypot(best.se, Math.min(...below.map((point) => point.se)))
+  const upperWorse = Math.max(...above.map((point) => point.score))
+    <= best.score + CONFIRM_Z * Math.hypot(best.se, Math.min(...above.map((point) => point.se)))
 
-  const base = entries.find((entry) => entry.sensitivity === plan.baseline)
-  const decision = { phase: plan.phase, level: session.level, baseline: plan.baseline, entries }
-  const next = { ...session, latestComparison: entries }
-
-  if (plan.phase === 'screen') {
-    if (entries.length === 1) return finish({ ...next, decisions: [...session.decisions, decision] }, 'resolution')
-    // These are explicit task-resolution heuristics, not estimates of player skill.
-    if (entries.every((entry) => entry.score >= 29)) {
-      return finish({ ...next, decisions: [...session.decisions, decision] }, 'ceiling')
-    }
-    if (entries.every((entry) => entry.score <= 1)) {
-      return finish({ ...next, decisions: [...session.decisions, decision] }, 'floor')
-    }
-    const challenger = entries.filter((entry) => entry.sensitivity !== base.sensitivity && entry.score - base.score >= session.minGain)
-      .sort((a, b) => b.score - a.score || Math.abs(a.sensitivity - base.sensitivity) - Math.abs(b.sensitivity - base.sensitivity))[0]
-    const screened = { ...next, decisions: [...session.decisions, { ...decision, challenger: challenger?.sensitivity ?? null }] }
-    if (!challenger) return narrow(screened)
-    return { ...screened, plan: confirmPlan(screened, base.sensitivity, challenger.sensitivity) }
+  if (curve?.curvatureDown) {
+    // Sample the fitted shape a probe-gap out on each side. A real peak stands
+    // above both.
+    const left = curve.toScore(best.sensitivity * (1 - MIN_PROBE_GAP))
+    const right = curve.toScore(best.sensitivity * (1 + MIN_PROBE_GAP))
+    const fitted = best.score >= left - 2 && best.score >= right - 2
+    return (lowerWorse && upperWorse) || (fitted && curve.optimum != null)
   }
-
-  const challenger = entries.find((entry) => entry.sensitivity === plan.challenger)
-  const recentRuns = session.runs.slice(plan.start)
-  // Each pair is one challenger round against one base round, so a pair's
-  // difference is independent of who opened the block.
-  const differences = []
-  for (let offset = 0; offset + 1 < recentRuns.length; offset += 2) {
-    const first = recentRuns[offset]
-    const second = recentRuns[offset + 1]
-    differences.push(first.sensitivity === plan.challenger
-      ? first.kills - second.kills
-      : second.kills - first.kills)
-  }
-  const accepted = differences.every((difference) => difference > 0) && challenger.score - base.score >= session.minGain
-  const driftWarning = base.kills[1] <= base.kills[0] - 3
-    ? '基准档成绩下降 3 杀以上，可能有状态波动，建议休息后继续复查。' : null
-  const direction = plan.challenger > plan.baseline ? 'up' : 'down'
-  const confirmed = {
-    ...next, confirmations: session.confirmations + 1,
-    incumbent: accepted ? challenger.sensitivity : session.incumbent,
-    warning: driftWarning ?? session.warning,
-    decisions: [...session.decisions, { ...decision, challenger: plan.challenger, differences, accepted, direction }],
-  }
-  // A rejected challenge means the outside rung is not better: the band is real,
-  // so tighten the step where we stand and look again.
-  if (!accepted) return narrow(confirmed)
-  // An accepted challenge in refine mode is a warning sign, not a reason to keep
-  // walking: this mode exists because the player's value is roughly right. If the
-  // edge keeps winning, their value is not roughly right, and the honest answer is
-  // to say so and point them at the mode that searches from scratch — not to spend
-  // thirty more range runs crawling there one rung at a time.
-  if (!isDiscovery(confirmed.mode)) return finish(confirmed, 'runaway')
-  return travelPlan(confirmed, direction)
+  return lowerWorse && upperWorse
 }
+
+/**
+ * Are the measured scores pinned at one end of the scale?
+ *
+ * This is the one place where the search has to admit the instrument failed
+ * rather than keep probing: a range where every setting scores 0–1 or 28–30
+ * cannot rank settings at all, and more rounds cannot fix that.
+ *
+ * It is therefore a claim about the *whole playable range*, not about the
+ * corner the run happens to be standing in. So the test needs both:
+ *  - three distinct settings (two points are a line, not a band), and
+ *  - the opening layout finished, because a run still inside its first bracket
+ *    has not seen enough of the range to call it flat. A player whose real
+ *    optimum is three times their current eDPI scores 1/30 at every setting
+ *    near home; ending there would report "the test cannot distinguish
+ *    anything" when the truth is "you started in the wrong place".
+ *
+ * Past the layout the search is free to walk outward, and only then does a
+ * uniformly extreme score mean what it says.
+ */
+const SATURATED_CEILING = 28
+const SATURATED_FLOOR = 1
+
+function saturated(pts, laidOut) {
+  if (!laidOut) return null
+  if (pts.length < 3) return null
+  if (pts.every((point) => point.raw >= SATURATED_CEILING)) return 'ceiling'
+  if (pts.every((point) => point.raw <= SATURATED_FLOOR)) return 'floor'
+  return null
+}
+
+/**
+ * Is the run still in its opening sweep, where every round is buying coverage
+ * rather than confirmation? Saturation and "no candidates left" must not fire
+ * during it, or a run that started in a flat band reports the band as the
+ * answer without ever having looked outside.
+ */
+function keepsExtending(session, pts) {
+  const anchor = session.setup.sens
+  if (!Number.isFinite(anchor)) return false
+  const gap = Math.log(1 + MIN_PROBE_GAP)
+  const reach = (direction) => {
+    const side = pts.filter((point) => (direction > 0
+      ? point.sensitivity > anchor
+      : point.sensitivity < anchor))
+    if (!side.length) return 0
+    const edge = direction > 0 ? side[side.length - 1].sensitivity : side[0].sensitivity
+    return Math.abs(Math.log(edge / anchor)) / gap
+  }
+  // A side whose rungs are cut off by the playable range counts as covered:
+  // there is nowhere further to go on that side, and waiting for coverage that
+  // cannot exist would strand the sweep and let a late rule fire on a run that
+  // never explored anything.
+  const coverable = (direction) => {
+    const limit = direction > 0 ? EDPI_CEILING : EDPI_FLOOR
+    const perRung = Math.log(1 + MIN_PROBE_GAP)
+    const rungs = Math.floor(Math.abs(Math.log((limit / session.setup.dpi) / anchor)) / perRung)
+    return Math.min(LAYOUT_STEPS[direction > 0 ? 1 : 0], Math.max(1, rungs))
+  }
+  const upNeed = coverable(1) - 0.5
+  const downNeed = coverable(-1) - 0.5
+  return reach(1) < upNeed || reach(-1) < downNeed
+}
+
+// ---------------------------------------------------------------------------
+// Proposal
+// ---------------------------------------------------------------------------
+
+/**
+ * Where to go next.
+ *
+ * Already-measured sensitivities are excluded by construction: every candidate
+ * has to sit at least MIN_PROBE_GAP away from every recorded point, so the
+ * search cannot re-ask the same number and cannot creep so finely that two
+ * proposals are the same physical movement.
+ *
+ * Two sources of candidates, and they answer different questions:
+ *
+ *  - the **fitted curve** (`curve`) says where the peak most likely is given
+ *    every round played so far. Proposing just off that peak is how the search
+ *    lands on values nobody chose in advance — the consecutive proposals walk
+ *    towards the fitted optimum rather than around the starting point;
+ *  - the **measured points** say what is still unknown: an unlocked edge that
+ *    has not been shown to fall away, or a gap between two points wide enough
+ *    that the fitted line through it is only a guess.
+ *
+ * Ranking is by fitted score first, then by how much is left to learn there.
+ * When `forceExtend` is set the outward candidates are promoted, so a run that
+ * started somewhere cannot stop before the curve has actually disproved it.
+ */
+export function proposeNext(pts, best, setup, options = {}) {
+  const dpi = setup.dpi
+  if (!best || !Number.isFinite(dpi) || dpi <= 0) return null
+
+  const gap = Math.max(MIN_PROBE_GAP, options.span ?? MIN_PROBE_GAP)
+  const curve = options.curve ?? null
+  const taken = pts.map((point) => point.sensitivity)
+  /**
+   * Is this value already known?
+   *
+   * A proposal has to be a *different* sensitivity, but the bar for "different"
+   * cannot be the full probe spacing: once the fitted peak lands between two
+   * measured points, everything within one gap of it is blocked and the search
+   * would fall through to the last-resort ring — jumping across the whole band
+   * to find something "far enough" away. That is a self-inflicted runaway.
+   *
+   * So the block radius is half a gap: enough that two proposals are never the
+   * same physical movement, small enough that a fitted peak is always reachable.
+   * Exact repeats are caught by the quantised value itself.
+   */
+  const blockRadius = gap / 2
+  const blocked = (value) => taken.some((other) => Math.abs(other - value) / value < blockRadius)
+  const inRange = (value) => value > 0 && value * dpi >= EDPI_FLOOR && value * dpi <= EDPI_CEILING
+  const add = (list, value, why, tier) => {
+    if (value == null || !Number.isFinite(value)) return
+    const rounded = quantize(value)
+    if (!inRange(rounded) || blocked(rounded)) return
+    list.push({
+      value: rounded,
+      why,
+      tier,
+      predicted: curve ? curve.toScore(rounded) : null,
+      distance: Math.abs(Math.log(rounded / best.sensitivity)),
+    })
+  }
+
+  // Neighbours of the leader, nearest first, so "the outermost point on this
+  // side" is always index 0.
+  const below = pts.filter((point) => point.sensitivity < best.sensitivity).sort((a, b) => b.sensitivity - a.sensitivity)
+  const above = pts.filter((point) => point.sensitivity > best.sensitivity).sort((a, b) => a.sensitivity - b.sensitivity)
+  const outer = [...pts].sort((a, b) => a.sensitivity - b.sensitivity)
+  const lowest = outer[0]
+  const highest = outer[outer.length - 1]
+
+  const candidates = []
+
+  // 0. Layout: a fixed, symmetrical budget of rungs on each side of where the
+  //    run began. A fit through a one-sided range is a slope, and following a
+  //    slope is how a search walks off in one direction forever. So the opening
+  //    rounds buy coverage — the same amount on both sides, no matter what the
+  //    scores say — and then this rule is finished for good.
+  //
+  //    It is a budget, not a preference: given a choice, a coverage rule on a
+  //    one-sided landscape keeps picking the same side and ends at the floor of
+  //    the playable range, which is the original runaway wearing a new name.
+  const anchorValue = options.anchor ?? best.sensitivity
+  const highSide = pts.filter((point) => point.sensitivity > anchorValue)
+  const lowSide = pts.filter((point) => point.sensitivity < anchorValue)
+  const rungsOut = (side, direction) => (side.length
+    ? Math.abs(Math.log((direction > 0 ? side.at(-1) : side[0]).sensitivity / anchorValue)) / Math.log(1 + gap)
+    : 0)
+  // A side that has run into the playable limit is done, however few rungs it
+  // managed: asking for coverage that cannot exist would strand the sweep and
+  // hand the round back to a rule that has not been laid out yet.
+  const atLimit = (direction) => {
+    const edge = direction > 0 ? highSide : lowSide
+    if (!edge.length) return false
+    const value = (direction > 0 ? edge.at(-1) : edge[0]).sensitivity * dpi
+    return direction > 0 ? value >= EDPI_CEILING * 0.98 : value <= EDPI_FLOOR * 1.02
+  }
+  const upLeft = atLimit(1) ? 0 : Math.max(0, Math.floor(LAYOUT_STEPS[1] - rungsOut(highSide, 1)))
+  const downLeft = atLimit(-1) ? 0 : Math.max(0, Math.floor(LAYOUT_STEPS[0] - rungsOut(lowSide, -1)))
+  if (upLeft > 0 || downLeft > 0) {
+    // Alternate so a warm-up trend cannot be mistaken for a slope, and so the
+    // band grows symmetrically. When one side is pinned against the playable
+    // limit the other side takes the round.
+    const goUp = upLeft > downLeft || (upLeft === downLeft && highSide.length <= lowSide.length)
+    const side = goUp ? highSide : lowSide
+    const from = side.length ? (goUp ? side.at(-1) : side[0]).sensitivity : anchorValue
+    // Aim at the intended side, but if the playable range blocks it, take the
+    // round on the other side rather than dropping the candidate — otherwise a
+    // start near a limit stalls the opening sweep entirely.
+    const preferred = goUp ? from * (1 + gap) : from * (1 - gap)
+    const fallback = goUp ? from * (1 - gap) : from * (1 + gap)
+    if (inRange(quantize(preferred)) && !blocked(quantize(preferred))) {
+      add(candidates, preferred, 'layout', 0)
+    } else {
+      add(candidates, fallback, 'layout', 0)
+    }
+  } else {
+    // 1. Past the fitting. One target, chosen by the slope of what has been
+    //    measured: while the response is still rising towards one end, the peak
+    //    is that way and one more rung there buys information. Once the leader
+    //    is interior — lower on both sides — there is nothing outward left to
+    //    find, and proposing a rung anyway is how a run spends twenty rounds
+    //    walking to the edge after it already has its answer.
+    const bestIsInterior = Boolean(best)
+      && pts.some((point) => point.sensitivity < best.sensitivity)
+      && pts.some((point) => point.sensitivity > best.sensitivity)
+    const outwardStillLearning = !bestIsInterior
+      || !bracketed(pts, best, curve)
+    const goesUp = highest.score > lowest.score
+      || (best && best.sensitivity >= highest.sensitivity)
+    if (outwardStillLearning) {
+      if (goesUp) add(candidates, highest.sensitivity * (1 + gap), 'step', 1)
+      else add(candidates, lowest.sensitivity * (1 - gap), 'step', 1)
+      // If that rung is already measured, step from it once more, so a stretch
+      // of adjacent measured rungs cannot stall the proposal.
+      if (goesUp) add(candidates, highest.sensitivity * (1 + gap) ** 2, 'step', 3)
+      else add(candidates, lowest.sensitivity * (1 - gap) ** 2, 'step', 3)
+    }
+
+    // 2. A gap between two measured points wide enough that the fitted line
+    //    through it is a guess rather than a measurement. This is what closes
+    //    up a bracket once the outer rungs are in place.
+    for (let index = 0; index + 1 < pts.length; index += 1) {
+      const left = pts[index]
+      const right = pts[index + 1]
+      const ratio = right.sensitivity / left.sensitivity
+      if (ratio < 1 + 3 * gap) continue
+      add(candidates, left.sensitivity * ratio ** 0.5, 'bracket', 2)
+    }
+  }
+
+  if (!candidates.length) {
+    // Everything nearby is taken. Widen one ring at a time — 2 gaps, then 3 —
+    // rather than leaping across the whole band: a search that has run out of
+    // ideas near what it knows should look a little further, not somewhere
+    // else entirely.
+    for (const ratio of [1 + 2 * gap, 1 + 3 * gap]) {
+      add(candidates, best.sensitivity * ratio, 'probe', 3)
+      add(candidates, best.sensitivity / ratio, 'probe', 3)
+    }
+  }
+  // Fill a hole between two measured points if one is still wide open. This is
+  // the honest "no idea, so cover the gap" move, and unlike the old last
+  // resort it stays inside the range the run has already committed to.
+  if (!candidates.length) {
+    for (let index = 0; index + 1 < pts.length; index += 1) {
+      const left = pts[index]
+      const right = pts[index + 1]
+      const ratio = right.sensitivity / left.sensitivity
+      if (ratio < 1 + 2 * blockRadius) continue
+      add(candidates, left.sensitivity * ratio ** 0.5, 'probe', 3)
+    }
+  }
+  if (!candidates.length) return null
+
+  const ranked = candidates.sort((a, b) => {
+    // Layout first, always, while its budget lasts: nothing else can be trusted
+    // until the band has been covered.
+    if (a.why === 'layout' || b.why === 'layout') {
+      if (a.why !== b.why) return a.why === 'layout' ? -1 : 1
+      return a.distance - b.distance
+    }
+    // Then the fit: whichever candidate the model believes scores highest.
+    const byScore = (b.predicted ?? -Infinity) - (a.predicted ?? -Infinity)
+    if (Math.abs(byScore) > 1e-9) return byScore
+    if (a.tier !== b.tier) return a.tier - b.tier
+    return a.distance - b.distance
+  })
+  const chosen = ranked[0]
+
+  return {
+    sensitivity: chosen.value,
+    edpi: chosen.value * dpi,
+    why: chosen.why,
+    predicted: chosen.predicted,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+
+/** Bumped whenever the derivation changes; drafts of other versions are refused. */
+export const ALGORITHM = 'adaptive-curve-v2'
+
+/**
+ * The plan object the UI renders.
+ *
+ * One round is now the unit: the proposal is a single continuous value
+ * recomputed after every recorded score, so there is no multi-round block to
+ * describe. `schedule`/`cursor` are kept because the whole screen and the draft
+ * format are built around "the setting you are about to play".
+ */
+function planFor(session, proposal) {
+  const rounds = session.runs.length
+  return {
+    phase: rounds === 0 ? 'seed' : 'probe',
+    sensitivity: proposal?.sensitivity ?? null,
+    candidates: proposal ? [proposal.sensitivity] : [],
+    schedule: proposal ? [proposal.sensitivity] : [],
+    cursor: 0,
+    start: rounds,
+    why: proposal?.why ?? null,
+    edpi: proposal?.edpi ?? null,
+    message: proposal
+      ? `已测 ${rounds} 轮。综合目前所有成绩，下一轮测 ${proposal.sensitivity.toFixed(3)}（${Math.round(proposal.edpi)} eDPI）。`
+      : '已经没有更值得测的数值了。',
+  }
+}
+
 export function createSession(setup, options = {}) {
-  // The mode may arrive either as an option or carried on the setup object: the
-  // setup is what gets persisted and handed around the UI, so both are accepted
-  // rather than making every call site remember which one the callee wants.
   const mode = options.mode ?? setup.mode ?? DEFAULT_MODE
   if (!MODES[mode]) throw new RangeError(`未知的测试模式：${mode}`)
   const discovery = isDiscovery(mode)
@@ -436,63 +757,215 @@ export function createSession(setup, options = {}) {
   if (!Number.isFinite(setup.dpi) || setup.dpi <= 0) {
     throw new RangeError('DPI 必须是大于 0 的数字。')
   }
-  // Discovery mode has no meaningful starting value: the player's current
-  // sensitivity is the thing being questioned, so it may be absent entirely.
-  const startSens = discovery ? quantize(Number(setup.sens) > 0 ? Number(setup.sens) : LADDER_ANCHOR / setup.dpi) : setup.sens
-  if (!Number.isFinite(startSens) || startSens <= 0) {
-    throw new RangeError('灵敏度必须是大于 0 的数字。')
-  }
-  const incumbent = quantize(startSens)
-  if (incumbent <= 0) throw new RangeError('灵敏度按三位小数取整后必须大于 0。')
+  const rawSens = Number(setup.sens)
+  const startSens = quantize(Number.isFinite(rawSens) && rawSens > 0 ? rawSens : LADDER_ANCHOR / setup.dpi)
+  if (startSens <= 0) throw new RangeError('灵敏度按三位小数取整后必须大于 0。')
 
-  const resolved = { ...setup, sens: incumbent }
+  const resolved = { ...setup, sens: startSens }
   if (discovery) resolved.startSens = null
 
-  const factors = [...(options.factors ?? ladderFor(resolved, mode))]
-  const minGain = options.minGain ?? MIN_MEAN_GAIN
-  if (!factors.length || factors.some((factor, index) => !Number.isFinite(factor) || factor <= 1 || (index > 0 && factor >= factors[index - 1]))) {
-    throw new RangeError('倍率必须大于 1 并严格递减。')
+  // A run can only measure settings the game can actually produce. A starting
+  // value outside that band is a setup mistake, and the honest response is to
+  // say so rather than to spend a range run on a sensitivity nobody can enter.
+  const startEdpi = startSens * setup.dpi
+  if (!discovery && (startEdpi < EDPI_FLOOR || startEdpi > EDPI_CEILING)) {
+    throw new RangeError(`起始灵敏度 ${Math.round(startEdpi)} eDPI 超出可测范围（${EDPI_FLOOR}–${EDPI_CEILING}）。`)
   }
-  if (!Number.isFinite(minGain) || minGain <= 0) throw new RangeError('最小提升必须大于 0。')
-
-  // Discovery needs a longer repeat: its sweep already re-measures nothing, so the
-  // first confirmation after the switch is the player's only noise check.
-  const pairs = options.pairs ?? (discovery ? CONFIRM_PAIRS : CONFIRM_PAIRS)
-  if (!Number.isInteger(pairs) || pairs < 1) throw new RangeError('复查对数需为不小于 1 的整数。')
 
   const session = {
-    setup: resolved, mode, factors, minGain, pairs, incumbent, level: 0, runs: [], decisions: [],
-    anchorEdpi: ladderAnchor(resolved, mode), confirmations: 0,
-    latestComparison: [], warning: null, done: false, reason: null,
+    algorithm: ALGORITHM,
+    setup: resolved,
+    mode,
+    incumbent: startSens,
+    // Kept for the explanation diagrams and the result copy; the search itself
+    // no longer walks these.
+    factors: ladderFor(resolved, mode),
+    anchorEdpi: ladderAnchor(resolved, mode),
+    runs: [],
+    decisions: [],
+    proposal: null,
+    latestComparison: [],
+    warning: null,
+    done: false,
+    reason: null,
   }
 
-  if (discovery) {
-    return sweepPlan(session, '先在这个灵敏度附近粗扫一遍，找到大致合适的范围，再围绕它细调。')
+  // Round one is the only fixed part: the player's own value in refine mode, the
+  // population centre in discovery. From round two on, the estimator speaks.
+  const opener = discovery ? quantize(LADDER_ANCHOR / setup.dpi) : startSens
+  if (opener <= 0) throw new RangeError('灵敏度按三位小数取整后必须大于 0。')
+  const seed = { sensitivity: opener, edpi: opener * setup.dpi, why: 'seed' }
+  return { ...session, proposal: seed, plan: planFor(session, seed) }
+}
+
+/**
+ * Re-derive the whole state from the rounds recorded so far.
+ *
+ * Deliberately a pure function of `setup + runs`: that is what makes undo, draft
+ * restoration and "the next value depends on the whole history" one code path
+ * instead of three that can drift apart.
+ */
+export function derive(session) {
+  if (session.done) return session
+  const runs = session.runs
+  const pts = points(runs, { priorScore: globalPrior(runs) })
+  const best = leader(pts, session.incumbent)
+  const alive = plausible(pts, best)
+  const curve = fitCurve(pts)
+  // While the opening sweep is still running, no stopping rule may fire: the
+  // shape is unknown until both sides have been reached, and a run that stops
+  // early reports a corner of the range as if it were the whole of it.
+  const sweep = keepsExtending(session, pts)
+  const extreme = saturated(pts, !sweep)
+
+  const base = {
+    ...session,
+    incumbent: best?.sensitivity ?? session.incumbent,
+    // The curve is *not* stored on the session: it holds closures and is a pure
+    // function of the runs, so keeping it in state would make two sessions that
+    // describe the same run compare unequal and would leak a function into the
+    // saved draft. Anything that needs the shape calls `fitCurve` itself.
+    latestComparison: alive.map((point) => ({
+      sensitivity: point.sensitivity,
+      kills: point.kills,
+      score: point.score,
+      n: point.n,
+      se: point.se,
+    })),
   }
-  return { ...session, plan: screenPlan(session, '先测当前档位及上下各一档，再根据本轮成绩决定推进方向。') }
+
+  // A run whose whole measured band sits at the floor has one honest reading:
+  // this test cannot rank settings from here. But if that band also ended at the
+  // edge of the playable range, the likelier story is that the run started in
+  // the wrong place, and saying so is far more useful than "try again".
+  if (extreme) {
+    const atEdge = best && (best.sensitivity * session.setup.dpi <= EDPI_FLOOR * 1.35
+      || best.sensitivity * session.setup.dpi >= EDPI_CEILING * 0.75)
+    return finish(base, extreme === 'floor' && atEdge ? 'edge' : extreme)
+  }
+  if (runs.length >= MAX_ROUNDS) return finish(base, 'noise')
+  if (pts.length >= 2 && alive.length === 1) return finish(base, 'confirmed')
+  // A leader pressed against the playable edge has nowhere further to go.
+  if (best && (best.sensitivity * session.setup.dpi <= EDPI_FLOOR * 1.02
+    || best.sensitivity * session.setup.dpi >= EDPI_CEILING * 0.98)) {
+    return finish(base, 'edge')
+  }
+
+  const start = session.setup.sens
+  const vote = keepsVote(session, pts, best, alive, curve)
+
+  // The curve has run out of things to say: every candidate is already
+  // measured, or the band is closed and the remaining spread is inside the
+  // noise. Report the plausible set honestly instead of manufacturing a winner.
+  if (pts.length >= 5 && !vote) {
+    const spread = Math.max(...alive.map((point) => point.score))
+      - Math.min(...alive.map((point) => point.score))
+    const resolution = 2 * SIGMA_KILLS / Math.sqrt(Math.min(...alive.map((point) => point.n)) + PRIOR_ROUNDS)
+    // The band is closed *and* the fit agrees there is a single peak inside it:
+    // without both, "the numbers are close" just means the run never went far
+    // enough to find a difference.
+    const closed = bracketed(pts, best, curve) && curve?.curvatureDown
+    if (closed && spread <= resolution && Number.isFinite(start)) {
+      return finish(base, alive.length > 1 ? 'resolved' : 'confirmed')
+    }
+  }
+
+  const proposal = proposeNext(pts, best, session.setup, {
+    curve,
+    forceExtend: vote,
+    // Balance is measured around where the player started, not around whoever
+    // is leading: the point of evening out is to cover the band on both sides
+    // of the only fixed reference the run has.
+    anchor: Number.isFinite(start) ? start : best?.sensitivity,
+  })
+
+  if (!proposal) {
+    // No room to extend and no gap worth filling: the plausible set is the
+    // honest answer, so report it as a tie rather than as a single number.
+    return finish(base, alive.length > 1 ? 'resolved' : 'resolution')
+  }
+  return { ...base, proposal, plan: planFor(base, proposal) }
+}
+
+/**
+ * Is the value the player arrived with still a live hypothesis?
+ *
+ * It stops being one once enough rounds exist on both sides of it to place it
+ * on the curve, or once it is the bracketed leader. Until then, the honest
+ * thing is to keep sampling outward rather than crown a winner — otherwise a
+ * run can converge on a narrow local high simply because nothing outside it was
+ * ever played.
+ */
+function keepsVote(session, pts, best, alive, curve = null) {
+  const start = session.setup.sens
+  if (!Number.isFinite(start)) return false
+  if (!alive.some((point) => point.sensitivity === start)) return false
+  // A run that stops while still climbing has found an edge, not a peak. That
+  // is a state of the *range*, not of the starting value: the round has to go
+  // outward whichever point is currently leading, or the reported answer is
+  // simply wherever the walk ran out of budget.
+  if (best && !bracketed(pts, best, curve)) return true
+  const sides = [
+    pts.filter((point) => point.sensitivity < start).length,
+    pts.filter((point) => point.sensitivity > start).length,
+  ]
+  return Math.min(...sides) < 2
 }
 
 export function recordKills(session, value) {
   if (session.done) throw new Error('测试已完成。')
   const kills = parseKills(value)
   const sensitivity = session.plan.schedule[session.plan.cursor]
-  const runs = [...session.runs, { sensitivity, kills, phase: session.plan.phase, level: session.level }]
-  const next = { ...session, runs, plan: { ...session.plan, cursor: session.plan.cursor + 1 } }
-  return next.plan.cursor === next.plan.schedule.length ? advance(next) : next
+  if (sensitivity == null) throw new Error('当前没有待记录的档位。')
+  const runs = [...session.runs, { sensitivity, kills, phase: session.plan.phase }]
+  return derive({
+    ...session,
+    runs,
+    decisions: [...session.decisions, decide(session, sensitivity, kills, runs)],
+  })
+}
+
+/**
+ * What this one round changed, in terms the result page can show. A record of
+ * the reasoning, never an input to it: the decision itself is always re-derived
+ * from all the runs.
+ */
+function decide(before, sensitivity, kills, runs) {
+  const pts = points(runs, { priorScore: globalPrior(runs.slice(0, -1)) ?? kills })
+  const best = leader(pts, before.incumbent)
+  const leaderChanged = Boolean(best && best.sensitivity !== before.incumbent)
+  const point = pts.find((entry) => entry.sensitivity === sensitivity)
+  return {
+    round: runs.length,
+    phase: before.plan.phase,
+    sensitivity,
+    kills,
+    // All the rounds played at this setting, not just this one: the whole point
+    // of the estimator is that a second look revises the first.
+    score: point?.raw ?? kills,
+    rounds: point?.n ?? 1,
+    leader: best?.sensitivity ?? null,
+    incumbentBefore: before.incumbent,
+    leaderChanged,
+    accepted: leaderChanged,
+    direction: sensitivity > before.incumbent ? 'up' : sensitivity < before.incumbent ? 'down' : 'same',
+  }
 }
 
 export function rebuildSession(setup, runs, options = {}) {
   return runs.reduce((session, run) => {
-    if (session.plan.schedule[session.plan.cursor] !== run.sensitivity) throw new Error('成绩与测试计划不一致。')
+    const expected = session.plan.schedule[session.plan.cursor]
+    if (run.sensitivity !== expected) throw new Error('成绩与测试计划不一致。')
     return recordKills(session, run.kills)
   }, createSession(setup, options))
 }
 
 export function undoLastRun(session) {
   if (!session.runs.length) return session
-  return rebuildSession(session.setup, session.runs.slice(0, -1), {
-    mode: session.mode, factors: session.factors, minGain: session.minGain, pairs: session.pairs,
-  })
+  // Replaying through the same derivation is the only way undo stays honest:
+  // the proposal after n-1 rounds is a function of those n-1 rounds, and any
+  // shortcut would leave a stale plan behind.
+  return rebuildSession(session.setup, session.runs.slice(0, -1), { mode: session.mode })
 }
 
 export function completeEarly(session) {
@@ -501,26 +974,68 @@ export function completeEarly(session) {
   return finish(session, 'manual')
 }
 
+function finish(session, reason) {
+  const pts = points(session.runs, { priorScore: globalPrior(session.runs) })
+  const best = leader(pts, session.incumbent)
+  const settled = { ...session, done: true, reason, plan: planFor(session, null) }
+  if (!best) return settled
+  return {
+    ...settled,
+    incumbent: best.sensitivity,
+    warning: session.warning ?? caveat(reason, pts, best),
+  }
+}
+
+/**
+ * A result that stopped before proving its own shape is a local optimum, and
+ * saying so is more useful than presenting it as the answer.
+ */
+function caveat(reason, pts, best) {
+  if (reason === 'edge') return '这个数值已经到可测范围的边界了，真正合适的可能在范围之外。'
+  if ((reason === 'noise' || reason === 'resolved') && !bracketed(pts, best)) {
+    return '这次没能确认峰值两边都在变差，结果可能只是一个局部高点。'
+  }
+  return null
+}
+
 export function summarizeSession(session) {
   if (!session.done) throw new Error('请完成测试或选择提前查看结果。')
-  const candidates = [...new Set(session.runs.map((run) => run.sensitivity))]
-  const history = candidates.map((sensitivity) => {
-    const kills = session.runs.filter((run) => run.sensitivity === sensitivity).map((run) => run.kills)
-    return { sensitivity, edpi: sensitivity * session.setup.dpi, kills, score: mean(kills) }
-  }).sort((a, b) => a.sensitivity - b.sensitivity)
-  const incumbentEntry = history.find((entry) => entry.sensitivity === session.incumbent)
-  const localBase = session.latestComparison.find((entry) => entry.sensitivity === session.incumbent)
-  const close = localBase ? session.latestComparison.filter((entry) => Math.abs(entry.score - localBase.score) < session.minGain).map((entry) => entry.sensitivity) : []
+  const pts = points(session.runs, { priorScore: globalPrior(session.runs) })
+  const best = leader(pts, session.incumbent)
+  const alive = plausible(pts, best)
+  const outcome = explainOutcome(session)
+  const history = pts.map((point) => ({
+    sensitivity: point.sensitivity,
+    edpi: point.sensitivity * session.setup.dpi,
+    kills: point.kills,
+    score: point.raw,
+    adjusted: point.score,
+    rounds: point.n,
+  }))
   return {
-    mode: 'range-medium-30', algorithm: 'adaptive-local-v1', testMode: session.mode,
-    sensitivity: session.incumbent, edpi: session.incumbent * session.setup.dpi,
-    score: incumbentEntry.score, rounds: session.runs.length,
-    tied: close.length > 1, leaders: close,
-    reason: session.reason, message: END_REASONS[session.reason], warning: session.warning,
-    history, runs: session.runs, decisions: session.decisions, latestComparison: session.latestComparison,
-    // Discovery has no "initial" value to compare against: the whole point is that
-    // the player arrived without one, so the result must not claim a delta.
+    mode: 'range-medium-30',
+    algorithm: ALGORITHM,
+    testMode: session.mode,
+    sensitivity: session.incumbent,
+    edpi: session.incumbent * session.setup.dpi,
+    score: best?.raw ?? 0,
+    rounds: session.runs.length,
+    // "Tied" is now a statement about the data: candidates whose error bars
+    // still overlap the leader, not candidates inside an arbitrary kill band.
+    tied: alive.length > 1,
+    leaders: alive.map((point) => point.sensitivity).sort((a, b) => a - b),
+    reason: session.reason,
+    message: outcome.message,
+    outcomeReason: outcome.reason,
+    discriminating: outcome.discriminating,
+    warning: session.warning,
+    history,
+    runs: session.runs,
+    decisions: session.decisions,
+    latestComparison: session.latestComparison,
+    // `null` on purpose for discovery: there was no starting value, and a
+    // result must not claim a delta against a number the player never gave.
     initialSensitivity: session.setup.startSens === null ? null : session.setup.sens,
-    minGain: session.minGain,
+    sigma: SIGMA_KILLS,
   }
 }

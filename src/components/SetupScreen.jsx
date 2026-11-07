@@ -15,14 +15,14 @@ const SCALE_MIN = 0.1
 const quantize = (value) => Number(value.toFixed(3))
 
 /**
- * The three settings the run will test first, in ascending order, with the one
+ * The first three values a run will ask for, in ascending order, with the one
  * you already use marked. This is the whole preview: no scale, no ratios —
  * three numbers you can read straight off the page.
  *
- * The step is calibrated to this player's eDPI, so the same dial shows a wider
- * bracket at low sensitivity and a narrower one at high sensitivity.
+ * The step is calibrated to this player's eDPI, so the same preview shows a
+ * wider spread at low sensitivity and a narrower one at high sensitivity.
  */
-function bracket(base, dpi) {
+function opening(base, dpi) {
   const factor = stepFactors(ladderAnchor({ dpi, sens: base }))[0]
   const low = quantize(base / factor)
   const high = quantize(base * factor)
@@ -30,19 +30,19 @@ function bracket(base, dpi) {
   return candidates.map((value) => ({
     value,
     current: value === base,
-    direction: value < base ? '低一档' : value > base ? '高一档' : '现在',
+    direction: value < base ? '往下试' : value > base ? '往上试' : '现在',
   }))
 }
 
-/** The preview: the settings this run starts with, smallest number first. */
-function BracketPreview({ marks, placeholder, className = '' }) {
+/** The preview: the first values this run asks for, smallest number first. */
+function OpeningPreview({ marks, placeholder, className = '' }) {
   return (
     <div className={`preview-frame ${className}`.trim()}>
       <div className="preview-head">
         <TargetSpheres className="preview-glyph" />
-        <span className="preview-label">第一轮测这三档</span>
+        <span className="preview-label">头几轮会试这几个</span>
       </div>
-      <ol className="preview" aria-label="第一轮要试的三个灵敏度" data-placeholder={placeholder}>
+      <ol className="preview" aria-label="头几轮会试的灵敏度" data-placeholder={placeholder}>
         {marks.map((mark) => (
           <li key={mark.value} data-current={mark.current}>
             <span className="preview-value num">
@@ -80,7 +80,7 @@ function ModeChoice({ mode, onChange }) {
             <strong>{entry.label}</strong>
             <span className="mode-blurb">{entry.blurb}</span>
             <span className="mode-budget">
-              {entry.discover ? '先从常见范围粗扫，再局部精调' : '只在现有数值附近比较'}
+              {entry.discover ? '先从常见数值开始，再逐步调准' : '只在你现在的数值附近找'}
             </span>
           </label>
         ))}
@@ -105,7 +105,7 @@ export default function SetupScreen({ onStart, initial }) {
   const calibrated = base >= SCALE_MIN
   const showPreview = !discover && calibrated
   const marks = useMemo(
-    () => (showPreview ? bracket(base, Number(dpi) > 0 ? Number(dpi) : 800) : []),
+    () => (showPreview ? opening(base, Number(dpi) > 0 ? Number(dpi) : 800) : []),
     [showPreview, base, dpi],
   )
 
@@ -152,10 +152,10 @@ export default function SetupScreen({ onStart, initial }) {
 
       {discover ? (
         <p className="preview-slot mode-note">
-          不需要填现在的灵敏度。测试会从职业选手中最常见的数值开始，逐级往两边试，找到大致范围后再细调。
+          不需要填现在的灵敏度。测试会从职业选手最常见的数值开始，往上下各试几个，再逐步调准。
         </p>
       ) : (
-        <BracketPreview className="preview-slot" marks={marks} placeholder={!calibratedInput} />
+        <OpeningPreview className="preview-slot" marks={marks} placeholder={!calibratedInput} />
       )}
 
       <div className="entry">

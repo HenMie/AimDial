@@ -1,41 +1,44 @@
-import { STEP_DELTAS, CONFIRM_ROUNDS, LADDER_ANCHOR } from '../lib/rangeCalibration.js'
+import { LAYOUT_STEPS, SIGMA_KILLS } from '../lib/rangeCalibration.js'
 
 /**
  * Four figures, one instrument. Each states its own idea with its own drawing
  * device; they share only the palette and the type, never the shape. A reader
  * scrolling past should be able to tell them apart by silhouette alone.
  *
- * The step is quoted in cm/360 rather than as a ratio: the ratio changes with the
- * player's eDPI — that is the whole point of the ladder — so a fixed "×1.25" here
- * would state something the search does not do. cm/360 = 13062.86 / eDPI for the
- * 0.07 deg/count yaw constant.
+ * What they describe is the search that actually runs: a response curve is
+ * estimated from every round played, and the next setting is read off that
+ * curve. There are no rungs and no plateaus to explain, because the search no
+ * longer works that way.
  */
 const CM_PER_360_PER_EDPI = 13062.86
 const cmPer360 = (edpi) => CM_PER_360_PER_EDPI / edpi
-const cmPerStep = (delta) => cmPer360(LADDER_ANCHOR) - cmPer360(LADDER_ANCHOR + delta)
 
 /* ------------------------------------------------------------------ step 01 */
 
 /**
- * Step 1 — one position on a continuous axis, with its two neighbours.
+ * Step 1 — the opening sweep, drawn as a **scale with a bracket being filled**.
  *
- * Drawn as a graduated strip seen from above rather than a dot on a rail: the
- * graduations give it the character of a scale, and the red bracket marks the
- * span the first round actually covers. This is the only figure that shows the
- * axis, because the other three happen at a single point on it.
+ * Two rungs each side of the starting value, marked as measured, and the next
+ * one open. This is the only figure that shows the axis as a whole; the others
+ * act on a curve.
  */
 function ScreenFigure() {
   const W = 360
   const x0 = 26
   const x1 = W - 26
   const mid = (x0 + x1) / 2
-  const span = 88
-  const low = mid - span
-  const high = mid + span
+  const step = 42
   const ticks = Array.from({ length: 37 }, (_, i) => x0 + ((x1 - x0) / 36) * i)
+  const marks = [
+    { x: mid - step * 2, filled: true },
+    { x: mid - step, filled: true },
+    { x: mid, filled: true, current: true },
+    { x: mid + step, filled: true },
+    { x: mid + step * 2, filled: true },
+    { x: mid + step * 3, filled: false },
+  ]
   return (
-    <svg viewBox="0 0 360 112" role="img" aria-label="当前灵敏度与上下各一档，标在同一条刻度上">
-      {/* The graduated strip: minor ticks, with a heavier mark every sixth. */}
+    <svg viewBox="0 0 360 112" role="img" aria-label={`从当前灵敏度向上下各试 ${LAYOUT_STEPS[0]} 个数值，先看看两边差多少`}>
       <g>
         {ticks.map((x, i) => (
           <line
@@ -45,20 +48,22 @@ function ScreenFigure() {
           />
         ))}
       </g>
-      {/* The span this round covers, measured as a caliper under the scale. */}
-      <path className="fig-caliper" d={`M${low} 78 v8 H${high} v-8`} />
+      <path className="fig-caliper" d={`M${mid - step * 2} 78 v8 H${mid + step * 2} v-8`} />
       <text className="fig-label is-muted" x={mid} y={102} textAnchor="middle">
-        第一轮测这三档
+        先在上下各试 {LAYOUT_STEPS[0]} 个
       </text>
-
-      {/* The three settings: the current one heavier, the two candidates open. */}
-      <circle className="fig-dot is-ink" cx={mid} cy="42" r="7" />
-      <circle className="fig-dot" cx={low} cy="42" r="4.5" />
-      <circle className="fig-dot" cx={high} cy="42" r="4.5" />
-      <text className="fig-label is-signal" x={mid} y={24} textAnchor="middle">当前</text>
-      <line className="fig-leader" x1={mid} y1="49" x2={mid} y2="56" />
-      <text className="fig-label is-muted" x={low} y={24} textAnchor="middle">低一档</text>
-      <text className="fig-label is-muted" x={high} y={24} textAnchor="middle">高一档</text>
+      {marks.map((mark, index) => (
+        <g key={index}>
+          <circle
+            className={mark.filled ? 'fig-dot is-ink' : 'fig-dot'}
+            cx={mark.x} cy="42"
+            r={mark.current ? 7 : 4.5}
+            fill={mark.filled ? undefined : 'none'}
+          />
+          {mark.current && <text className="fig-label is-signal" x={mark.x} y={24} textAnchor="middle">当前</text>}
+          {!mark.filled && <text className="fig-label is-muted" x={mark.x} y={24} textAnchor="middle">下一轮</text>}
+        </g>
+      ))}
     </svg>
   )
 }
@@ -66,48 +71,45 @@ function ScreenFigure() {
 /* ------------------------------------------------------------------ step 02 */
 
 /**
- * Step 2 — the interleaved repeat, drawn as a **timeline**, which is what it is.
+ * Step 2 — the response curve, drawn as an actual fitted shape.
  *
- * Six rounds left to right, each a tick on a time axis, coloured by which setting
- * it plays. The three brackets underneath are the pairwise comparisons, so the
- * reader sees why six rounds mean three verdicts. This is deliberately a
- * different shape from step 1: a sequence, not a scale.
+ * This is the heart of the method and the part the previous version got wrong:
+ * the search is not comparing candidates one against another, it is estimating
+ * where the curve peaks. Drawn as a smooth hump with the measured points on it
+ * and one open point where the next round goes.
  */
-function ConfirmFigure() {
-  // new, old | old, new | new, old — the opening setting flips every pair.
-  const sequence = ['new', 'old', 'old', 'new', 'new', 'old']
-  const x0 = 34
-  const gap = 52
+function CurveFigure() {
+  const W = 360
+  const H = 132
+  const x0 = 30
+  const x1 = W - 24
+  const base = 108
+  const top = 30
+  // A true Gaussian in log-eDPI, sampled to a path.
+  const peakX = x0 + (x1 - x0) * 0.58
+  const width = (x1 - x0) * 0.19
+  const yOf = (x) => base - (base - top) * Math.exp(-0.5 * ((x - peakX) / width) ** 2)
+  const path = Array.from({ length: 61 }, (_, i) => {
+    const x = x0 + ((x1 - x0) / 60) * i
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${yOf(x).toFixed(1)}`
+  }).join(' ')
+  const measured = [0.2, 0.36, 0.52, 0.74, 0.9].map((f) => x0 + (x1 - x0) * f)
+  const nextX = x0 + (x1 - x0) * 0.58
   return (
-    <svg
-      viewBox="0 0 360 118"
-      role="img"
-      aria-label={`按新、旧交错打 ${CONFIRM_ROUNDS} 轮，每两轮组成一次对比`}
-    >
-      <line className="fig-axis" x1={x0 - 12} y1="46" x2={x0 + gap * 5 + 12} y2="46" />
-      {sequence.map((kind, i) => {
-        const x = x0 + gap * i
-        const isNew = kind === 'new'
-        return (
-          <g key={i}>
-            <line className={isNew ? 'fig-stem is-signal' : 'fig-stem'} x1={x} x2={x} y1="46" y2={isNew ? 22 : 30} />
-            <circle className={isNew ? 'fig-dot is-signal' : 'fig-dot'} cx={x} cy="46" r={isNew ? 6.5 : 4.5} />
-            <text className={isNew ? 'fig-label is-signal' : 'fig-label is-muted'} x={x} y="16" textAnchor="middle">
-              {isNew ? '新' : '旧'}
-            </text>
-            <text className="fig-label is-muted" x={x} y="66" textAnchor="middle">{i + 1}</text>
-          </g>
-        )
-      })}
-      {/* Pairwise comparisons: three brackets, each covering two adjacent rounds. */}
-      {[0, 2, 4].map((start) => {
-        const a = x0 + gap * start
-        const b = x0 + gap * (start + 1)
-        return <path key={start} className="fig-caliper" d={`M${a - 10} 78 v8 H${b + 10} v-8`} />
-      })}
-      <text className="fig-label is-muted" x="180" y="106" textAnchor="middle">
-        每两轮算一次对比，三对全赢才算数
-      </text>
+    <svg viewBox="0 0 360 132" role="img" aria-label="把全部成绩放在一起，下一轮挑最值得试的数值">
+      <line className="fig-axis" x1={x0} y1={base} x2={x1} y2={base} />
+      <path className="fig-curve" d={path} fill="none" />
+      {measured.map((x, i) => (
+        <circle key={i} className="fig-dot is-ink" cx={x} cy={yOf(x)} r="3.6" />
+      ))}
+      {/* The proposal: where the fitted curve peaks, and therefore where the
+          next round goes. A stem, not a dot, so it reads as "not yet played". */}
+      <line className="fig-stem is-signal" x1={nextX} y1={yOf(nextX)} x2={nextX} y2={base + 14} />
+      <circle className="fig-dot is-signal" cx={nextX} cy={yOf(nextX)} r="5.5" fill="none" />
+      <text className="fig-label is-signal" x={nextX} y={24} textAnchor="middle">下一轮</text>
+      <text className="fig-label is-muted" x={x0} y={126} textAnchor="start">低</text>
+      <text className="fig-label is-muted" x={x1} y={126} textAnchor="end">高</text>
+      <text className="fig-label is-muted" x={W / 2} y={126} textAnchor="middle">灵敏度</text>
     </svg>
   )
 }
@@ -115,36 +117,43 @@ function ConfirmFigure() {
 /* ------------------------------------------------------------------ step 03 */
 
 /**
- * Step 3 — the hand step narrowing, drawn as a **stacked ladder** where length IS
- * the physical distance. Three rungs of 3.9, 2.0 and 1.0 cm on a shared left
- * edge, so the halving is visible as halving rather than asserted in a caption.
+ * Step 3 — why a one-kill difference proves nothing, drawn as **rounds
+ * accumulating on one setting**.
+ *
+ * Three columns for one setting played one, two and three times. The bar is the
+ * running mean; the whisker is the uncertainty, and it is the thing that
+ * shrinks. This is the figure that justifies the whole stopping rule.
  */
-function NarrowFigure() {
-  const rungs = [STEP_DELTAS[0], STEP_DELTAS[1], STEP_DELTAS[2], STEP_DELTAS[3]]
-  const maxCm = cmPerStep(rungs[0])
-  const barMax = 168
-  const left = 122
+function NoiseFigure() {
+  const H = 132
+  const base = 104
+  const top = 26
+  const columns = [1, 2, 3].map((rounds, index) => {
+    const x = 76 + index * 92
+    const se = SIGMA_KILLS / Math.sqrt(rounds)
+    const scale = 17 // px per kill
+    const mean = 22
+    const y = base - (mean / 30) * (base - top)
+    return { x, se, scale, y, rounds }
+  })
   return (
-    <svg viewBox="0 0 360 132" role="img" aria-label="四级的 360° 手移动量逐级减半">
-      {rungs.map((delta, i) => {
-        const cm = cmPerStep(delta)
-        const w = (cm / maxCm) * barMax
-        const y = 14 + i * 26
-        const last = i === rungs.length - 1
-        return (
-          <g key={delta}>
-            <text className="fig-label" x={left - 12} y={y + 11} textAnchor="end">
-              {cm.toFixed(cm < 1 ? 2 : 1)} cm
-            </text>
-            <rect className={last ? 'fig-rung is-signal' : 'fig-rung'} x={left} y={y} width={w} height="12" />
-          </g>
-        )
-      })}
-      {/* The rung labels sit clear of the bars, right-aligned in the column the
-          shortest bar cannot reach, so no label ever lands on a bar. */}
-      <text className="fig-label is-muted" x="330" y="25" textAnchor="end">粗扫</text>
-      <text className="fig-label is-muted" x="330" y="103" textAnchor="end">最细</text>
-      <line className="fig-axis" x1={left - 1} y1="8" x2={left - 1} y2="122" />
+    <svg viewBox="0 0 360 132" role="img" aria-label="同一个数值打得越多，结论越可靠">
+      <line className="fig-axis" x1="30" y1={base} x2="336" y2={base} />
+      {columns.map((column) => (
+        <g key={column.rounds}>
+          {/* Half the confidence interval either side of the mean. */}
+          <line className="fig-stem" x1={column.x} y1={column.y - column.se * column.scale} x2={column.x} y2={column.y + column.se * column.scale} />
+          <line className="fig-axis" x1={column.x - 10} y1={column.y - column.se * column.scale} x2={column.x + 10} y2={column.y - column.se * column.scale} />
+          <line className="fig-axis" x1={column.x - 10} y1={column.y + column.se * column.scale} x2={column.x + 10} y2={column.y + column.se * column.scale} />
+          <circle className="fig-dot is-ink" cx={column.x} cy={column.y} r="5" />
+          <text className="fig-label is-muted" x={column.x} y={base + 20} textAnchor="middle">
+            {column.rounds} 轮
+          </text>
+        </g>
+      ))}
+      <text className="fig-label is-muted" x="180" y="18" textAnchor="middle">
+        同一个数值测得越多越可靠
+      </text>
     </svg>
   )
 }
@@ -152,55 +161,46 @@ function NarrowFigure() {
 /* ------------------------------------------------------------------ step 04 */
 
 /**
- * Step 4 — the gate, drawn as **two verdicts on the same pair of rounds**.
+ * Step 4 — the stopping rule, drawn as **two overlapping error bars**.
  *
- * The old figure asserted a threshold with two dots and a caption. This one shows
- * the only thing that matters: two pairwise differences, and the difference
- * between accepting and rejecting. A row of paired marks where each pair either
- * favours the new setting or does not, with the accept rule applied across them.
+ * The only thing that decides whether a run is over: can the leader and the
+ * runner-up be told apart, given how uncertain each one still is? Two cases
+ * side by side — overlapping (keep going or call it a tie) and separated
+ * (done) — because the rule is exactly that comparison.
  */
 function GateFigure() {
+  const scale = 7.4 // px per kill
   const cases = [
-    { case: '都赢', verdict: '换', diffs: [3, 2] },
-    { case: '输一对', verdict: '不换', diffs: [3, -1] },
+    { label: '还分不开', a: 21, b: 23.4, seA: 1.9, seB: 1.9, verdict: '继续测 / 算平手' },
+    { label: '分得开', a: 17.5, b: 25.5, seA: 1.1, seB: 1.1, verdict: '结束' },
   ]
   return (
-    <svg viewBox="0 0 360 132" role="img" aria-label="两次对比都领先才接受，任何一对落后就拒绝">
-      {/* Column heads sit on the rule, so each column is labelled once instead of
-          repeating "第 1 对 / 第 2 对" inside every row. The left column names the
-          scenario, so the reader knows which row is which without decoding signs. */}
-      <text className="fig-label is-muted" x="16" y="14">情形</text>
-      <text className="fig-label is-muted" x="104" y="14">第 1 对</text>
-      <text className="fig-label is-muted" x="212" y="14">第 2 对</text>
-      <text className="fig-label is-muted" x="344" y="14" textAnchor="end">结果</text>
+    <svg viewBox="0 0 360 132" role="img" aria-label="两个数值成绩接近就分不出高下，拉开差距才算有结论">
       <line className="fig-axis" x1="16" y1="22" x2="344" y2="22" />
-      {cases.map((row, rowIndex) => {
-        const y = 48 + rowIndex * 44
-        const accepted = row.diffs.every((d) => d > 0)
+      <text className="fig-label is-muted" x="16" y="14">两组成绩</text>
+      <text className="fig-label is-muted" x="344" y="14" textAnchor="end">结论</text>
+      {cases.map((row, index) => {
+        const y = 54 + index * 52
+        const xFor = (kills) => 40 + kills * scale
+        const separated = row.b - row.a > 2 * Math.max(row.seA, row.seB)
         return (
-          <g key={row.verdict}>
-            <text className="fig-label" x="16" y={y}>{row.case}</text>
-            {row.diffs.map((d, i) => (
-              <text
-                key={i}
-                className={d > 0 ? 'fig-label is-signal' : 'fig-label is-muted'}
-                x={i === 0 ? 104 : 212}
-                y={y}
-              >
-                {d > 0 ? `+${d}` : d}
-              </text>
-            ))}
-            <text
-              className={accepted ? 'fig-label is-signal' : 'fig-label is-muted'}
-              x="344" y={y} textAnchor="end"
-            >
-              {row.verdict}
+          <g key={row.label}>
+            <text className="fig-label" x="16" y={y + 4}>{row.label}</text>
+            {/* Two whiskers on the same row: overlap is what "not decided" looks like. */}
+            <line className="fig-stem" x1={xFor(row.a)} y1={y - 14} x2={xFor(row.a)} y2={y + 14} />
+            <line className="fig-axis" x1={xFor(row.a - row.seA)} y1={y} x2={xFor(row.a + row.seA)} y2={y} />
+            <circle className="fig-dot is-ink" cx={xFor(row.a)} cy={y} r="3.6" />
+            <line className="fig-stem" x1={xFor(row.b)} y1={y - 14} x2={xFor(row.b)} y2={y + 14} />
+            <line className="fig-axis" x1={xFor(row.b - row.seB)} y1={y} x2={xFor(row.b + row.seB)} y2={y} />
+            <circle className={separated ? 'fig-dot is-signal' : 'fig-dot'} cx={xFor(row.b)} cy={y} r="3.6" />
+            <text className={separated ? 'fig-label is-signal' : 'fig-label is-muted'} x="344" y={y + 4} textAnchor="end">
+              {separated ? '结束' : '继续'}
             </text>
           </g>
         )
       })}
       <line className="fig-axis" x1="16" y1="112" x2="344" y2="112" />
-      <text className="fig-label is-muted" x="16" y="126">两对都为正才换，出现负值就保留原档</text>
+      <text className="fig-label is-muted" x="16" y="126">成绩挨在一起就分不出，拉开了才有结论</text>
     </svg>
   )
 }
@@ -209,23 +209,23 @@ function GateFigure() {
 
 const STEPS = [
   {
-    title: '先测当前档和左右各一档',
-    body: '从现在的灵敏度上下各挪一格，三档各打一轮，比较平均击杀。每一步对应的手部移动量是固定的，所以灵敏度越高，这一步的比例就越小。',
+    title: '先在现在的位置两边都试试',
+    body: `从你现在的灵敏度出发，往上往下各试 ${LAYOUT_STEPS[0]} 个数值，看看两边手感差多少。`,
     figure: <ScreenFigure />,
   },
   {
-    title: '领先的档位要交错复查',
-    body: `单轮高分可能只是手感好，所以领先档和原档交错再打 ${CONFIRM_ROUNDS} 轮，每两轮算一次对比。`,
-    figure: <ConfirmFigure />,
+    title: '每一轮都会算进去',
+    body: '把测过的所有数值和成绩放在一起，看哪个灵敏度打得最准，下一轮就挑最值得试的地方。',
+    figure: <CurveFigure />,
   },
   {
-    title: '没找到提升就收小台阶',
-    body: '一圈下来没有更稳的档位，就把每一步的手部移动量收窄一半，在附近继续细找四轮。',
-    figure: <NarrowFigure />,
+    title: '同一个数值会重复测几次',
+    body: '一次打得好可能只是手感好，所以靠近的好成绩会回头再确认，避免被偶然发挥骗到。',
+    figure: <NoiseFigure />,
   },
   {
-    title: '只认重复出现的提升',
-    body: '新档位要每一对对比都领先、平均多杀 1 个以上，才会替换基准；任何一对落后就保留原档。',
+    title: '确定拉开差距就结束',
+    body: '最好的那个明显比其它都好，测试就结束；如果几个数值表现几乎一样，会直接告诉你挑顺手的即可。',
     figure: <GateFigure />,
   },
 ]

@@ -1690,29 +1690,6 @@ button.back svg {
   color: var(--chalk-3);
 }
 
-.run-progress {
-  flex: 1 1 8rem;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 140px;
-  margin-left: auto;
-}
-
-.run-progress i {
-  flex: 1 1 0;
-  height: 3px;
-  background: var(--brass-dim);
-}
-
-.run-progress i[data-done='true'] {
-  background: var(--chalk);
-}
-
-.run-progress i[data-now='true'] {
-  background: var(--signal);
-}
-
 .target-value {
   display: grid;
   gap: 8px;
@@ -2690,6 +2667,16 @@ button.back svg {
   fill: var(--signal);
 }
 
+/* The fitted response curve in the method figure: an estimate, so it is drawn
+   in the muted ink rather than the signal colour, which is reserved for what
+   the search decided. */
+.fig-curve {
+  stroke: var(--chalk-3);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 0;
+}
+
 .fig-label {
   fill: var(--chalk-2);
   font: 500 10px var(--mono);
@@ -2932,11 +2919,6 @@ button.back svg {
   .run-top {
     gap: 8px 12px;
     padding-bottom: 8px;
-  }
-
-  .run-progress {
-    flex-basis: 100%;
-    margin-left: 0;
   }
 
   .target-value {

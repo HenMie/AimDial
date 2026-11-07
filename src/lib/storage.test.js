@@ -9,7 +9,7 @@ function memoryStorage() {
 }
 
 describe('persistent calibration', () => {
-  it('restores dynamic confirmation plans and unfinished input', () => {
+  it('restores dynamic plans and unfinished input', () => {
     const storage = memoryStorage()
     const session = [20, 19, 25, 20, 23].reduce(recordKills, createSession(setup))
     saveDraft('session-1', session, '2', storage)
@@ -25,7 +25,7 @@ describe('persistent calibration', () => {
     saveDraft('session-1', undoLastRun(session), '', storage)
     const restored = restoreDraft(loadData(storage).draft)
     expect(restored.runs).toHaveLength(2)
-    expect(restored.plan.phase).toBe('screen')
+    expect(restored.plan.sensitivity).toBe(undoLastRun(session).plan.sensitivity)
   })
 
   it('restores a manually finished session even before opening its report', () => {

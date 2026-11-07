@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCalibration } from '../hooks/useCalibration.js'
-import { BOTS_PER_RUN, CONFIRM_ROUNDS, parseKills, isDiscovery } from '../lib/rangeCalibration.js'
+import { BOTS_PER_RUN, parseKills } from '../lib/rangeCalibration.js'
 import { KillBar, Dial } from './instrument.jsx'
 
-const LEVEL_NAMES = ['粗测', '再收紧', '精调', '最细']
-
-function phaseLabel(plan, level, mode) {
-  if (plan.phase === 'confirm') return '复查'
-  if (plan.phase === 'sweep') return '粗扫'
-  const name = LEVEL_NAMES[level] ?? '精调'
-  return isDiscovery(mode) ? `${name}·细调` : name
+/**
+ * A label for what the search is doing right now. There are only two states
+ * now — the opening sweep and the fitted proposals — because the search no
+ * longer has phases to advance between.
+ */
+function phaseLabel(plan) {
+  return plan.phase === 'seed' ? '起点' : '继续找'
 }
 
 /**
@@ -98,24 +98,21 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
   const plan = session.plan
   const runs = session.runs
   const latest = runs.at(-1) ?? null
-  const progressDone = plan.cursor
-  const progressTotal = plan.schedule.length
   const base = plan.baseline ?? session.incumbent
-  // Each rung of the ladder is half the hand movement of the one before, so the
-  // player can see how fine the current step has become.
-  const stepWidth = session.factors[session.level] ? `±${((session.factors[session.level] - 1) * 100).toFixed(1)}%` : null
 
-  // The dial only carries the brackets this screen is working on: the current
-  // comparison group, with the setting you are about to record marked.
+  // The dial carries the settings this run has touched plus the one it is about
+  // to ask for, so the proposal is visibly a position on a scale rather than a
+  // number out of nowhere.
   const markers = useMemo(() => {
-    const unique = [...new Set([...plan.candidates, current])]
+    const measured = [...new Set(runs.map((run) => run.sensitivity))]
+    const unique = [...new Set([...measured, ...plan.candidates, current].filter((value) => value != null))]
     return unique.map((value) => ({
       value,
-      // Only the setting you are about to play is marked red; the base keeps
-      // the ink mark so the bracket's parent stays readable.
+      // Only the setting you are about to play is marked red; measured ones keep
+      // the ink mark so the history stays readable behind it.
       kind: value === current ? 'active' : value === base ? 'base' : 'candidate',
     }))
-  }, [plan.candidates, current, base])
+  }, [runs, plan.candidates, current, base])
 
   const pushDigit = (digit) => {
     setError(null)
@@ -193,7 +190,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         <span className="run-badge">
           第 <b className="num">{runs.length + 1}</b> 轮
           <span className="phase" data-phase={plan.phase}>
-            {phaseLabel(plan, session.level, session.mode)}
+            {phaseLabel(plan)}
           </span>
         </span>
         <span
@@ -204,22 +201,11 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         >
           {saveError ? '保存失败' : saved ? '已保存' : '保存中'}
         </span>
-        <div
-          className="run-progress"
-          role="progressbar"
-          aria-label="本轮组进度"
-          aria-valuemin={0}
-          aria-valuemax={progressTotal}
-          aria-valuenow={progressDone}
-        >
-          {plan.schedule.map((value, index) => (
-            <i
-              key={`${value}-${index}`}
-              data-done={index < progressDone}
-              data-now={index === progressDone}
-            />
-          ))}
-        </div>
+        {/* There is no fixed block of rounds any more: each round is its own
+            proposal, so the progress meter is replaced by a count. */}
+        <span className="mark-note" style={{ marginLeft: 'auto' }}>
+          已测 <span className="num">{runs.length}</span> 轮
+        </span>
       </div>
 
       <>
@@ -250,29 +236,21 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
           ) : null}
 
           {/* The decision rule is standing copy, not history: without it a player
-              has no idea how close this round has to be to count. Each line is a
-              single JSX text run — a source newline inside Chinese copy collapses
-              to a space and opens a gap mid-sentence. */}
+              has no idea what the next number is for. Each line is a single JSX
+              text run — a source newline inside Chinese copy collapses to a space
+              and opens a gap mid-sentence. */}
           <p className="standing-rule">
-            {plan.phase === 'confirm' ? (
+            {plan.phase === 'seed' ? (
               <>
-                {'复查阶段：和 '}
-                <span className="num">{base.toFixed(3)}</span>
-                {' 交错打 '}
-                <span className="num">{CONFIRM_ROUNDS}</span>
-                {' 轮，每一对都要领先、平均多杀 '}
-                <span className="num">{session.minGain}</span>
-                {' 个以上，新档才会替换基准。'}
-              </>
-            ) : plan.phase === 'sweep' ? (
-              <>
-                粗扫阶段：把这一圈的数值各打一轮，先找出手感最接近的范围；全部打完后，成绩最好的那一档会成为新起点。
+                {'先从你现在的 '}
+                <span className="num">{current.toFixed(3)}</span>
+                {' 开始。之后会在它上下各试几个数值，找出最合适的那个。'}
               </>
             ) : (
               <>
-                基准 <span className="num">{base.toFixed(3)}</span>，本档步宽{' '}
-                <span className="num">{stepWidth}</span>，新档要平均多杀{' '}
-                <span className="num">{session.minGain}</span> 个以上才算赢。
+                {'每次的数值都不一样，都是根据前面 '}
+                <span className="num">{runs.length}</span>
+                {' 轮的成绩挑出来的。'}
               </>
             )}
           </p>
@@ -283,12 +261,8 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
           base={base}
           markers={markers}
           readout={current.toFixed(3)}
-          readoutCaption={`第 ${runs.length + 1} 轮 · ${phaseLabel(plan, session.level, session.mode)}`}
-          referenceTicks={
-            plan.phase === 'confirm'
-              ? [{ value: base, label: '原档' }, { value: plan.challenger ?? current, label: '挑战档' }]
-              : [{ value: base, label: '基准' }]
-          }
+          readoutCaption={`第 ${runs.length + 1} 轮 · ${phaseLabel(plan)}`}
+          referenceTicks={[{ value: base, label: '目前最好' }]}
         />
 
         {session.warning && (
@@ -321,7 +295,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         <summary>
           本轮说明
           <span className="meta">
-            {plan.cursor + 1} / {plan.schedule.length}
+            第 {runs.length + 1} 轮
           </span>
         </summary>
         <div className="fold-body">
@@ -329,11 +303,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
           {/* Kept on one source line: JSX collapses the newline between two text
               lines into a space, which showed up mid-sentence in Chinese. */}
           <p>
-            {'当前基准为 '}
-            <span className="num">{session.incumbent.toFixed(3)}</span>
-            {'。新档位要在每一对交错对比中都领先、平均多击杀 '}
-            <span className="num">{session.minGain}</span>
-            {' 个，才会替换基准。测试期间请保持 DPI、武器、站位与护甲一致。'}
+            {'目前的成绩受手感波动影响，所以会反复测几轮再下结论，而不是靠一次成绩就换。测试期间请保持 DPI、武器、站位与护甲一致。'}
           </p>
         </div>
       </details>
@@ -341,12 +311,14 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
       {runs.length > 0 && (
         <details className="fold">
           <summary>
-            本轮组成绩
+            逐轮成绩
             <span className="meta">{runs.length} 轮</span>
           </summary>
           <div className="fold-body">
+            {/* The whole run, not the current block: there is no block any more,
+                and each round is a proposal derived from all the ones before it. */}
             <ol className="ledger-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {runs.slice(-plan.start).map((run, index) => (
+              {runs.map((run, index) => (
                 <li
                   key={`${run.sensitivity}-${index}`}
                   style={{
@@ -359,7 +331,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
                     fontSize: '0.8125rem',
                   }}
                 >
-                  <span className="n num">{plan.start + index + 1}</span>
+                  <span className="n num">{index + 1}</span>
                   <span className="s num">{run.sensitivity.toFixed(3)}</span>
                   <KillBar value={run.kills} tone={run.sensitivity === session.incumbent ? 'confirm' : 'ink'} />
                   <span className="k num">{run.kills}</span>

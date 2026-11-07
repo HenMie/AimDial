@@ -1,16 +1,17 @@
 import { useState } from 'react'
-import { BOTS_PER_RUN } from '../lib/rangeCalibration.js'
+import { SIGMA_KILLS } from '../lib/rangeCalibration.js'
 import { nearestPros, edpiLandmarks, ROSTER_SOURCE } from '../lib/pros.js'
 import { KillBar, Reading, SectionMark } from './instrument.jsx'
 
 const END_NOTE = {
-  plateau: '更小的步长没有带来稳定提升，保留当前档位。',
-  resolution: '游戏灵敏度最小只能调到 0.001，已无法进一步区分。',
-  ceiling: '各档位均接近满分，当前难度区分度不足。建议换用更难的方式重测。',
-  floor: '各档位均只有 0–1 杀，测试条件可能有误，请检查后重测。',
-  manual: '你已提前结束，结果取当前基准档位。',
-  edge: '已经挪到正常人不会使用的灵敏度边界，就此停止。',
-  runaway: '越测越偏、始终没有出现更差的档位：起点离合适的地方太远，建议改用「第一次找灵敏度」重测。',
+  resolved: '这几个数值表现几乎一样，挑手感最顺手的那个就行。',
+  confirmed: '最好的那个已经明显比其它都好，不必再测了。',
+  noise: '再测下去也分不出差别了，就用现在这个。',
+  ceiling: '几乎每轮都接近满分，这个难度已经分不出高低了。建议换更难的靶场重测。',
+  floor: '几乎每轮都只有 0–1 杀，测试条件可能有问题，请检查后再测。',
+  manual: '你提前结束了，结果取目前表现最好的那个。',
+  edge: '已经调到正常人不会用的极端数值，就此停下。',
+  resolution: '游戏灵敏度最小只能改到 0.001，再细也分不出来了。',
 }
 
 /**
@@ -128,15 +129,17 @@ export default function ResultScreen({ result, onRestart }) {
   const decisions = result.decisions ?? []
   const history = result.history ?? []
   const runs = result.runs ?? []
-  const confirmed = decisions.filter((decision) => decision.phase === 'confirm' && decision.accepted)
-  const lastConfirmation = confirmed.at(-1)
   // A discovery run has no starting value at all: `initialSensitivity` is null on
   // purpose, so `??` would fall back to the synthetic centre and claim a delta
   // the player never gave us. Distinguish "absent" from "not recorded".
   const discovery = result.testMode === 'discover'
   const initial = discovery ? null : (result.initialSensitivity ?? result.setup?.sens ?? null)
   const difference = initial ? (result.sensitivity / initial - 1) * 100 : null
-  const moved = confirmed.length > 0 || decisions.some((decision) => decision.phase === 'sweep')
+  // "Moved" is now a claim about the measurement: the recommendation differs
+  // from the starting value by more than the test can dismiss as noise.
+  const moved = difference != null && Math.abs(difference) > 1
+  // The runner-up, if the data could not separate it from the winner.
+  const runnerUp = (result.leaders ?? []).filter((value) => value !== result.sensitivity)
 
   const copy = async () => {
     try {
@@ -146,13 +149,6 @@ export default function ResultScreen({ result, onRestart }) {
     } catch (error) {
       setCopyError(`复制失败：${error.message}`)
     }
-  }
-
-  let confirmedGain = null
-  if (lastConfirmation) {
-    const baseline = lastConfirmation.entries.find((entry) => entry.sensitivity === lastConfirmation.baseline)
-    const challenger = lastConfirmation.entries.find((entry) => entry.sensitivity === lastConfirmation.challenger)
-    confirmedGain = challenger.score - baseline.score
   }
 
   return (
@@ -217,18 +213,12 @@ export default function ResultScreen({ result, onRestart }) {
           )}
 
           <p className="receipt" style={{ marginTop: 22, fontSize: '0.875rem' }}>
-            <span>{result.message ?? END_NOTE[result.reason] ?? '以下为此前保存的数据。'}</span>
-            {confirmedGain != null && (
+            <span>{result.message ?? END_NOTE[result.outcomeReason ?? result.reason] ?? '以下为此前保存的数据。'}</span>
+            {result.tied && result.discriminating && (
               <span className="num">
-                最近一次复查：{lastConfirmation.baseline.toFixed(3)} → {lastConfirmation.challenger.toFixed(3)}，
-                平均多击杀 <strong>{confirmedGain.toFixed(1)}</strong> 个；每一对分别多{' '}
-                {lastConfirmation.differences.map((value) => `+${value}`).join('、')} 个。
-              </span>
-            )}
-            {result.tied && (
-              <span className="num">
-                接近的档位：{result.leaders.map((value) => value.toFixed(3)).join('、')}，差距不足{' '}
-                {result.minGain} 个击杀，从中挑手感顺手的即可。
+                {'和 '}
+                {runnerUp.map((value) => value.toFixed(3)).join('、')}
+                {' 表现几乎一样，挑手感顺手的那个就行。'}
               </span>
             )}
             {result.warning && <span>{result.warning}</span>}
@@ -239,19 +229,15 @@ export default function ResultScreen({ result, onRestart }) {
           <Reading
             label="平均每轮击杀"
             value={result.score == null ? '—' : result.score.toFixed(1)}
-            unit={`/ ${BOTS_PER_RUN}`}
-            note="推荐档位在所有轮次上的平均成绩"
+            unit="/ 30"
+            note="推荐数值在每一轮的平均成绩"
             tone={moved ? 'confirm' : 'ink'}
           />
           <Reading
-            label="经复查确认的提升"
-            value={String(confirmed.length)}
-            unit="次"
-            note={
-              confirmed.length
-                ? '每一次都要在交错对比中每一对都领先，并平均多杀 1 个'
-                : '所有候选都没能稳定超过基准，因此没有换'
-            }
+            label="手感波动"
+            value={`±${SIGMA_KILLS.toFixed(1)}`}
+            unit="杀"
+            note="每轮成绩天然会有这么大起伏，比这更小的差距不算数"
           />
           <Reading label="记录轮次" value={String(result.rounds)} unit="轮" note="每轮 = 一次中等难度 30 bot 靶场" />
         </div>
@@ -260,7 +246,7 @@ export default function ResultScreen({ result, onRestart }) {
       <ProReference edpi={result.edpi} dpi={result.dpi} />
 
       <section style={{ marginTop: 'clamp(36px, 6vw, 60px)' }} aria-labelledby="bracket-title">
-        <SectionMark title="各档表现" note={`${history.length} 个档位`} id="bracket-title" />
+        <SectionMark title="测过的数值" note={`${history.length} 个`} id="bracket-title" />
         <table className="brackets">
           <thead>
             <tr>
@@ -279,7 +265,9 @@ export default function ResultScreen({ result, onRestart }) {
                   <td>
                     <span className="bv num">{sensitivity.toFixed(3)}</span>
                     {selected && <span className="tag">采用</span>}
-                    {!selected && kills.length > 1 && <span className="tag" data-tone="muted">测过 {kills.length} 轮</span>}
+                    {!selected && (entry.rounds ?? kills.length) > 1 && (
+                      <span className="tag" data-tone="muted">测过 {entry.rounds ?? kills.length} 轮</span>
+                    )}
                   </td>
                   <td>
                     <KillBar value={entry.score} tone={selected ? 'confirm' : 'ink'} />
@@ -292,7 +280,7 @@ export default function ResultScreen({ result, onRestart }) {
                   <td>
                     <span className="score">
                       {entry.score.toFixed(1)}
-                      <small> / {BOTS_PER_RUN}</small>
+                      <small> / 30</small>
                     </span>
                   </td>
                 </tr>
@@ -304,11 +292,11 @@ export default function ResultScreen({ result, onRestart }) {
 
       {decisions.length > 0 && (
         <section style={{ marginTop: 'clamp(28px, 5vw, 44px)' }} aria-labelledby="decision-title">
-          <SectionMark title="判定过程" note={`${decisions.length} 组`} id="decision-title" />
+          <SectionMark title="测试过程" note={`${decisions.length} 轮`} id="decision-title" />
           <details className="fold">
             <summary>
-              每一步怎么判的
-              <span className="meta">{decisions.length} 组判定</span>
+              每一轮的成绩
+              <span className="meta">{decisions.length} 轮</span>
             </summary>
             <div className="fold-body">
               <ol className="decisions">
@@ -316,21 +304,21 @@ export default function ResultScreen({ result, onRestart }) {
                   <li key={index}>
                     <h3>
                       <span className="num">{index + 1}.</span>
-                      {decision.phase === 'screen' ? '初测' : decision.accepted ? '复查通过' : '复查未通过'}
-                      {decision.challenger != null && <span className="num">{decision.challenger.toFixed(3)}</span>}
+                      <span className="num">{decision.sensitivity?.toFixed(3)}</span>
+                      {' → '}
+                      <span className="num">{decision.kills}</span>
+                      {' 杀'}
+                      {decision.leaderChanged && <span className="tag">目前最好</span>}
                     </h3>
                     <p>
-                      {decision.entries
-                        .map((entry) => `${entry.sensitivity.toFixed(3)}：${entry.kills.join('、')} 杀`)
-                        .join(' / ')}
+                      {decision.leader != null && (
+                        <>
+                          {'目前最好：'}
+                          <span className="num">{decision.leader.toFixed(3)}</span>
+                          {decision.rounds > 1 && `（测了 ${decision.rounds} 轮，平均 ${decision.score.toFixed(1)} 杀）`}
+                        </>
+                      )}
                     </p>
-                    {decision.differences && (
-                      <p>
-                        成对差值{' '}
-                        {decision.differences.map((value) => `${value > 0 ? '+' : ''}${value}`).join('、')}；
-                        {decision.accepted ? '更新基准，继续探索' : '保留基准，缩小步长'}
-                      </p>
-                    )}
                   </li>
                 ))}
               </ol>
