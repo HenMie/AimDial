@@ -5,6 +5,13 @@ primary_target: "src/App.jsx"
 related_targets: []
 ---
 
+---
+version: 1
+slug: "src-app-jsx"
+primary_target: "src/App.jsx"
+related_targets: []
+---
+
 # AimDial - surface brief: the calibration run
 
 <!-- impeccable:surface-brief 1 -->
@@ -33,62 +40,58 @@ they finish.
 
 ## Constraints
 
-- Every fact, threshold, and sentence of product truth stays: the 1.25/1.12/1.06
-  step factors, ABBA/BAAB confirmation, the +1 kill gate, the end reasons, the
-  draft/undo/finish lifecycle, localStorage restore, keyboard and screen-reader
-  operability.
+- Every fact, threshold, and sentence of product truth stays: the calibrated step
+  ladder, the interleaved confirmation, the +1 kill gate, the two modes, the end
+  reasons, the draft/undo/finish lifecycle, localStorage restore, keyboard and
+  screen-reader operability.
 - The algorithm modules and their tests are untouchable. No new dependency, no
-  web font over the network (a phone in a game overlay is an offline-capable
-  surface), light theme only - the surface is read on a phone within arm's reach
-  of a lit monitor, and a dark page next to a bright game is the worse choice.
+  backend, no environment variables, no runtime network calls.
+- No official Valorant artwork, logo, agent portrait, or map image ships. The
+  game enters only as authored SVG vocabulary (crosshair, compass ring, spray
+  plot, target spheres) at the level of an instrument part.
+- The person in the scene is alone at night, one monitor lit, playing a tactical
+  shooter whose own interface is dark with bright data on top.
 
-## Direction contract
+## Chosen direction and memorable moment
 
-THESIS: AimDial is a measuring instrument - its hero device is not a card but a
-calibrated dial scale whose live marker tracks the sensitivity you are about to
-type into the game. It refuses the category default: a dark card stack with neon
-accents, chip rows, a toggle-group logo, and the hero-metric template.
-
-OWN-WORLD: warm paper ground (#f3efe6) with a hairline grid, near-black ink
-(#15130d), one signal red (#c8402a) reserved for the number you must act on, and
-one teal (#0e6659) reserved for confirmed state. Instrument grammar: tabular
-numerals at display scale, ruler ticks, calipers, a mono face for every measured
-value, thin black rules instead of card borders, and section labels set as
-calibrated marks with a subscript.
-
-STORY: the visitor sees, in the first viewport, a dial whose marker already sits
-at their current sensitivity; entering their number moves it and prints the exact
-series of sensitivities to test. Through the run they type kill counts into a
-one-tap keypad and watch a run ledger fill; at the end they read the confirmed
-recommendation with the physical reason it won, then copy it.
-
-FIRST VIEWPORT: a sticky instrument bar (calibrated AimDial wordmark, silent save
-state, a step scale 01 Setup / 02 Test / 03 Result with the current step filled
-in signal red) over a two-column instrument body. Left column, twice the width of
-the right: a 260px-tall dial - log scale across the tested bracket, labelled
-major ticks, a red live marker with a printed readout above it, a ghost outline of
-the starting value behind it, and bracket marks over the three test settings.
-Below it the readout strip prints start and the three candidate settings with
-their exact three-decimal values. Right column: DPI and sensitivity entry styled
-as instrument fields (no pills, no chips - preset values sit on a tick row under
-the field), the derived size of the move, and one full-width signal-red primary
-action in the column's flow.
-
-FORM: committed in design instead of a dealt roll - the brief was a pin, and the
-operate mode rules route app screens code-led. SEED REFERENCE:
-`91eca2347e7f786b`.
-
-FINISH: unreviewed and undocumented is unfinished; this build ends with the
-finish review, the verdict, DESIGN.md, and every shipping raster carrying its
-provenance.
-
-## Memorable moment
-
-The dial marker gliding to a new setting when a number is committed, and the run
-ledger advancing: the app behaving like a device that is measuring you, not a
-form that is recording you.
+A **night-sky chart for aim**: deep ink ground, chalk-white data, brass-gold
+construction lines, and a single signal red reserved for the number to type and
+the player's own position. Every panel is a plate on that ground rather than a
+card on paper. The memorable moment is the Dial: drawn as an astrolabe, its ticks
+and constellation marks placed on a real graduated scale, with the tested
+settings hanging off it as stars.
 
 ## Unresolved decisions
 
-- None outstanding. Light theme and paper ground are committed; the drill canvas
-  module stays disconnected from the shipped flow and is out of scope.
+None. Density, vocabulary level, and the no-official-art rule are settled.
+
+## Direction contract
+
+THESIS: A measuring instrument read like a star chart — the run's settings are
+positions on a graduated scale, and the player's own value is the one red star.
+It refuses the category default of a soft neutral app card stack.
+
+OWN-WORLD: Deep ink ground (#0b0e14 to #131822), chalk data (#e8e4d8), brass
+construction lines (#8a7340 / #c9a961), signal red (#ff4655) used only for the
+actionable number and the player's own mark, teal (#3fd0c9) only for a confirmed
+result. Type: a grotesque for prose, a wide-tracked mono for every measured
+value and micro-label. Plates bounded by 1px brass hairlines with corner ticks,
+never rounded cards. Sparkline-grade grid texture at very low opacity.
+
+STORY: The player learns their sensitivity has a measured position among the
+population, sees the exact number to type, and trusts it because the evidence is
+drawn, not asserted.
+
+FIRST VIEWPORT: Header rail with wordmark, mode tabs, step meter. Left: the
+headline and the mode choice as two angular plates. Right: the hero number input
+at display scale with its tick row. Below the fold the same ground continues into
+the method figures. Primary action is a single red plate under the entry column.
+
+FORM: grounded direction 6 of 7 (celestial star atlas), raised by the Crouwel
+grid discipline (visible construction grid) and the signage terminal's
+one-message-per-band hierarchy.
+
+seed: 1aa456c666602653
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
+review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

@@ -2,53 +2,63 @@
 
 <!-- impeccable:design-schema 1 -->
 
-AimDial is a measuring instrument. Its interface exists to answer one question at
+AimDial is a night chart for aim. The interface exists to answer one question at
 a glance — *what number do I type into the game right now* — and then to record
-the result without ceremony. The design system below is what that job produced;
-it is written from the built interface in `src/`, not from a mood board.
+the result without ceremony. What follows is written from the built interface in
+`src/`, not from a mood board.
+
+The scene is fixed and drives everything below: one person, alone at night, one
+monitor lit, playing a tactical shooter whose own interface is dark with bright
+data on top. The page matches that room rather than glowing cream-white into it.
 
 ## Surface modes
 
 | Surface | Mode | Why |
 | --- | --- | --- |
-| `#/setup` (screens `01`) | Operate | Two inputs and one action; the dial previews the bracket the run will test. |
+| `#/setup` (screens `01`) | Operate | Two inputs and one action; the plate previews the bracket the run will test. |
 | `#/run` (screen `02`) | Operate | Repeated data entry mid-game-session, often one-handed on a phone. |
-| `#/result` (screen `03`) | Read | The player scans a recommendation and the evidence behind it. |
-| Method section (home page) | Read | Four explanatory steps with drawn figures. |
+| `#/result` (screen `03`) | Read | The player scans a recommendation, its evidence, and where it sits among pros. |
+| Method section (home) | Read | Four explanatory steps with drawn figures. |
 
-Persuade does not appear anywhere in the product. There is nothing to sell and
-no visitor to convert; a marketing register here would be a costume.
+Persuade does not appear anywhere. There is nothing to sell and no visitor to
+convert; a marketing register here would be a costume.
 
 ## Colour
 
-Committed *Restrained*: two saturated colours, each with exactly one job, over a
-warm paper ground. Every other surface is ink at a reduced strength.
+Committed *Restrained*, on a dark ground: a deep ink field, chalk data at four
+strengths, brass for construction, and exactly two colours with jobs.
 
 | Token | Value | Job |
 | --- | --- | --- |
-| `--paper` | `#f3efe6` | Ground. Warm, not cream-white: read next to a lit monitor, the page must not glow. |
-| `--paper-top` | `#f7f4ec` | Raised surfaces (dial face, keypad keys, figures). |
-| `--paper-sunk` | `#ebe5d8` | Pressed and hovered states, tick-row hover. |
-| `--ink` | `#15130d` | Primary text and all rules. Never pure black. |
-| `--ink-2` | `#3d3830` | Body copy, secondary figures. 9.4:1 on paper. |
-| `--ink-3` | `#6a6459` | Labels, captions, notes. 4.9:1 on paper — the floor for anything readable. |
-| `--ink-4` | `#a29b8d` | Disabled text and empty placeholders only. Never load-bearing. |
-| `--rule` | `#d8d1c1` | Separating rules inside a group. |
-| `--rule-2` | `#c3bba9` | Structural rules, tick marks, keypad key borders. |
-| `--signal` | `#c8402a` | Exactly one job: the sensitivity the player must act on, plus the current step in the step scale. 4.75:1 on paper, 4.95:1 on `--paper-top`. |
-| `--signal-ink` | `#8e2a1a` | Signal's text-on-wash variant and the primary button's bottom edge. |
-| `--signal-wash` | `#f6ded6` | Error notice ground. |
-| `--confirm` | `#0e6659` | Exactly one job: a value the search has *confirmed*. 5.1:1 on paper. |
-| `--confirm-wash` | `#dcece7` | Confirmed row ground, ABBA figure boxes. |
-| `--focus` | `#135e8c` | Focus rings only. Deliberately not the signal red: focus and "the number" must never be confusable. |
+| `--void` | `#080b11` | The ground itself. Deepest at the page edges, where the light falls off. |
+| `--ink-0` | `#0b0f16` | A plate seated directly on the ground (preview frame). |
+| `--ink-1` | `#10151e` | The instrument face and raised plates (dial, keypad keys). |
+| `--ink-2` | `#161c27` | Hovered plates and secondary raised surfaces. |
+| `--ink-3` | `#1e2634` | Pressed states and input wells. |
+| `--chalk` | `#e9e5d9` | Primary data and headings. Warm white, never a pure `#fff`, which vibrates on ink. |
+| `--chalk-2` | `#c3c0b6` | Body copy, secondary figures. 8.9:1 on `--void`. |
+| `--chalk-3` | `#8d8f92` | Labels, captions, notes. 4.9:1 on `--void` — the floor for anything readable. |
+| `--chalk-4` | `#5f6672` | Disabled and empty placeholders only. Never load-bearing. |
+| `--brass` | `#c9a961` | Kickers, legend marks, corner ticks, the marked bearings on a plate. |
+| `--brass-2` | `#8a7340` | The graduated rule under the hero input, dial frame, scrollbar thumb. |
+| `--brass-dim` | `#4a4126` | Structural hairlines between rows and around plates. |
+| `--signal` | `#ff4655` | Exactly two jobs: the number the player must act on, and the player's own mark among the pros. |
+| `--signal-ink` | `#ff8b93` | Signal as text on ink, where full-strength red would fail contrast. |
+| `--signal-wash` | `rgba(255,70,85,.14)` | Error notice ground and the selected mode plate. |
+| `--confirm` | `#3fd0c9` | Exactly one job: a value the search has *confirmed*. 9.6:1 on `--void`. |
+| `--confirm-ink` | `#8ff0ea` | Confirm as text. |
+| `--confirm-wash` | `rgba(63,208,201,.13)` | Confirmed row ground. |
+| `--focus` | `#6fd3ff` | Focus rings only. Deliberately neither red nor teal: focus, "the number", and "confirmed" must never be confusable. |
 
 Rules of the palette:
 
 - **Signal red is never decoration.** If it is red, it is the setting to type, the
-  current step, or a primary action. No red rules, no red headings, no red icons.
-- **Teal is never a candidate.** It only appears once a comparison has *accepted*
-  a setting, so a player can read the result page by colour alone.
-- **Ink carries hierarchy.** Headings, body, labels and captions are one colour at
+  current step, the primary action, or the player's own position on the chart.
+- **Teal is never a candidate.** It appears only once a comparison has *accepted*
+  a setting, so the result page is readable by colour alone.
+- **Brass is construction, not ornament.** It draws the frame, the rules, the
+  graduations and the micro-labels. It never fills a surface or colours body text.
+- **Chalk carries hierarchy.** Headings, body, labels and captions are one colour at
   four strengths; that is the whole type hierarchy, and it keeps the page calm.
 
 ## Type
@@ -59,12 +69,16 @@ faces ship tabular figures.
 
 | Token | Stack | Use |
 | --- | --- | --- |
-| `--sans` | `'Segoe UI Variable Display', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif` | Headings, body, buttons, labels, step names. |
-| `--mono` | `'Cascadia Mono', 'Consolas', 'SF Mono', ui-monospace, 'Menlo', monospace` | Every measured value: sensitivities, kill counts, tick labels, dates, the wordmark's kicker. |
+| `--sans` | `'Segoe UI Variable Display', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif` | Headings, body, buttons, plate copy. |
+| `--mono` | `'Cascadia Mono', 'Consolas', 'SF Mono', ui-monospace, 'Menlo', monospace` | Every measured value, every micro-label, the kicker, dates. |
 
 `.num` is the single class that applies the mono face, `font-variant-numeric:
-tabular-nums`, `zero` and `-0.02em` tracking. Every number in the product carries
-it, so digits never shift width as a value updates.
+tabular-nums`, `zero` and `-0.02em` tracking. Every number carries it, so digits
+never shift width as a value updates.
+
+Micro-labels (`.setup-kicker`, `.preview-label`) are mono at 0.6875rem with
+`0.16–0.22em` tracking and uppercase: on this page that is the chart's own
+legend voice, not "technical" costume — every one of them labels a measurement.
 
 Scale (fixed rem, ratio ≈ 1.14 — product UI, not a brand page):
 
@@ -72,85 +86,108 @@ Scale (fixed rem, ratio ≈ 1.14 — product UI, not a brand page):
 | --- | --- | --- |
 | `--step-0` | 0.8125rem | Micro labels inside tables and ledgers. |
 | `--step-1` | 0.9375rem | Body default. |
-| `--step-2` | 1.0625rem | Setup lede. |
+| `--step-2` | 1.0625rem | Plate lede copy. |
 | `--step-3` | 1.375rem | `Reading` values. |
 | `--step-4` | 2rem | Reserved; not currently used at rest. |
 | `--step-5` | `clamp(3.5rem, 12vw, 5.5rem)` | The one hero number per screen. |
 
-Display sizes are the exception to fixed rem: the hero number is `clamp()`ed
-because it must fill a 390px phone and a 1440px screen at the same optical
-weight. Tracking floor is `-0.06em` on the hero, `-0.02em` on mono body, and
-never tighter than `-0.03em` on the sans headings.
+Display sizes are `clamp()`ed because the hero number must fill a 390px phone and
+a 1440px screen at the same optical weight. Tracking floor is `-0.035em` on the
+hero, `-0.02em` on mono body, and never tighter than `-0.03em` on sans headings.
 
 ## Instrument grammar
 
-The components are the vocabulary. They are in `src/components/instrument.jsx`.
+The components are the vocabulary. They live in `src/components/instrument.jsx`
+(measurement parts) and `src/components/marks.jsx` (authored symbols).
+
+### Authored marks (`marks.jsx`)
+
+None of these is official Valorant artwork. The game enters at the level of an
+instrument's parts — the vocabulary a player already reads without being told:
+
+- `Crosshair` — four arms and a gap, plus a centre dot. The aiming reticle,
+  reduced to geometry. Signal red where it marks the point being measured.
+- `CompassRing` — a ring graduated in 72 ticks with every sixth tick major, and
+  one bearing needle. A real graduated scale, not a decorative circle.
+- `SprayPlot` — where shots landed around the centre of mass, on a dashed
+  crosshair with two range circles. Deterministic, so a session redraws the same.
+- `TargetSpheres` — the medium range read as a diagram: one near sphere, three
+  far ones, on a sight line.
+- `ConstellationPlate` — fixed node/edge data drawn as a chart furniture texture.
+  Masked out of the type's way; never used where it would read as illustration.
+- `DialMark` — the wordmark's astrolabe: bezel, inner ring, pointer, hub.
+
+Every one is a bare `viewBox` SVG with **no intrinsic size**, so each usage must
+set its own width/height class. A mark without one fills its parent — this bit
+the footer compass during the build and is why the defaults exist.
 
 ### `Dial`
 
-The product's signature device. A log-scale ruler over the closed ratio range
-`[0.5, 1.5]`, so equal factors land at equal distances: `project(r) =
-log(r / 0.5) / log 3`. Ratios are taken against the bracket's base, which means
-the ±1.25 candidates sit on the same spacing whatever the base is.
+The product's signature device, drawn as an astrolabe face. A log-scale ruler
+over the closed ratio range `[0.5, 1.5]`, so equal factors land at equal
+distances: `project(r) = log(r / 0.5) / log 3`. Ratios are taken against the
+bracket's base, so candidates sit at the same spacing whatever the base is.
 
-- Ticks: 11 stops, five of them *major* and printed (`×0.5`, `×0.75`, `×1`,
-  `×1.25`, `×1.5`) — whole fractions only, so the row never reads as a wall of
-  decimals.
-- Markers: a needle plus a diamond cap, one per tested setting. Four kinds —
-  `base` (ink, solid cap), `candidate` (ink, hollow cap), `active` (signal red,
-  the setting you are on now), `confirm` (teal, a confirmed winner). Duplicate
-  settings collapse into a subscript (`×2`) rather than stacking labels, and a
-  live kind always wins over `base` when the two share a position.
+- Face: `--ink-1` fading into `--void` under a warm brass pool, framed in
+  `--brass-2`. It reads as a lit instrument sunk into the chart, not a card.
+- Ticks: 11 stops, five *major* and printed (`×0.5`, `×0.75`, `×1`, `×1.25`,
+  `×1.5`) — whole fractions only.
+- Markers: a needle plus a diamond cap per tested setting. Four kinds — `base`
+  (chalk, solid cap), `candidate` (chalk, hollow), `active` (signal red, the
+  setting you are on), `confirm` (teal, a confirmed winner). Duplicates collapse
+  into a subscript (`×2`); a live kind wins over `base` at the same position.
 - Values print as three-decimal numerals under their needle, with `data-anchor`
-  flipping the outermost labels inward so nothing clips at the frame edge.
-- `.is-compact` hides the big readout (visually only, still announced) for the
-  run screen, where the same number is already the page heading.
-- The frame is a caliper: two short tabs outside the box, `--pad` inside, so the
-  scale never touches a page edge.
+  flipping the outermost labels inward so nothing clips.
+- `.is-compact` hides the big readout (visually only, still announced) on the run
+  screen, where the same number is already the page heading.
+- The frame is a caliper: two short brass tabs outside the box, `--pad` inside.
 
 ### `Reading`
 
-Label / value+unit / note, on a hairline row. Tones: `ink`, `confirm`, `signal`.
+Label / value+unit / note, on a hairline row. Tones `ink`, `confirm`, `signal`.
 Used only on the result page's measurement column.
 
 ### `SectionMark`
 
-The section label: a single letter (`B`, `C`, `D`, `H`, `M`), the title, and a
-right-aligned count, all sitting on a solid 1px ink rule. The letter is a
-subscript in signal red, not a numbered chapter heading — the number would
-imply a sequence the reader does not need, while a single mark is how a
-instrument labels a scale.
+The section label: the title and a right-aligned count on one brass hairline.
+**The mark owns the divider for its whole group.** Whatever follows it starts
+rule-less (`.mark + .history-list`, `.ledger`, `.steps-list`, `.pros-list`), so a
+heading rule never stacks against a list rule — two hairlines a few pixels apart
+read as a mistake and cut the page into unrelated strips.
 
 ### `KillBar`
 
-A ruler-backed bar over the 30-bot round: a 1px repeating-linear-gradient scale
-with a solid fill whose width is the kill count. Tones `ink`, `signal`,
-`confirm`. It replaces any chart library; the maximum is always the same 30, so
-bars are directly comparable down a column.
+A ruler-backed bar over the 30-bot round: a 1px repeating-gradient scale with a
+solid fill whose width is the kill count. Tones `ink`, `signal`, `confirm`. It
+replaces any chart library; the maximum is always 30, so bars compare down a
+column.
 
 ### `KillPad`
 
-The run screen's input: a two-digit reading display plus a 10-key grid
-(`1–9`, 清除, `0`, 30) and the record action. Digits are taken from the
-`document` keydown as well, skipping real form fields, so a desktop player can
-type `24` ⏎ without finding a field. The maximum is 30 and the app refuses
-anything above it inline rather than silently truncating.
+The run screen's input: a two-digit display plus a 10-key grid (`1–9`, 清除,
+`0`, 30) and the record action, each key a `--ink-1` plate on a brass hairline.
+Digits are taken from the `document` keydown as well, skipping real form fields,
+so a desktop player can type `24` ⏎ without finding a field. The maximum is 30
+and the app refuses anything above it inline rather than truncating.
 
 ## Layout
 
-- One column grid, `min(1120px, 100%)`, `--gutter: clamp(20px, 4vw, 44px)`.
-  At ≤620px the gutter drops to 18px.
+- One column, `min(1120px, 100%)`, `--gutter: clamp(20px, 4vw, 44px)`;
+  at ≤620px the gutter drops to 18px.
 - Two-column compositions (`setup`, `run`, `result-hero`) are
   `minmax(0, 1.42fr) minmax(0, 1fr)` with a `clamp(24px, 5vw, 64px)` gap: the
-  instrument is 1.4× the entry column, because the scale is what the page is
-  about. Both collapse to one column at ≤900px.
+  instrument is 1.4× the entry column. Both collapse to one column at ≤900px.
+- **Phone placement is explicit.** `.setup-head` and `.entry` become
+  `display: contents` under 900px, so every block inside them must name its own
+  `grid-row`. A block without one lands on top of its neighbour; the rows are
+  heading → kicker → mode choice → field → preview → action → DPI.
 - Spacing rhythm: 8px base; groups 16–22px; section separation
   `clamp(36px, 6vw, 64px)`; more space above a heading than below it.
-- Rules, not borders: thin ink rules separate groups, section marks sit on a
-  solid 1px rule, and the only boxed surfaces are the dial (ink 1px), the
-  resume banner (ink 1px, diagonal hatch) and the keypad keys (`--rule-2`).
-- No nested cards and no card grid. If a region needed a card, the region was
-  wrong.
+- Plates, not cards: a bordered box carries corner ticks drawn in brass
+  (`.preview-frame`), and the only other boxed surfaces are the dial and the
+  keypad keys. There are no rounded corners and no nested cards.
+- The ground carries a fixed coordinate grid at 88px, plus a brass pool at the
+  top and a faint signal pool at the bottom, so the page has a light source.
 
 ## Motion
 
@@ -158,52 +195,54 @@ One authored moment per state change, exponential ease-out only
 (`--ease: cubic-bezier(0.16, 1, 0.3, 1)`):
 
 - Step entry: `settle` — 10px rise and fade over 420ms.
-- Dial marker: `left` transitions over 320ms, so the needle glides to the new
-  setting instead of jumping.
+- Dial marker: `left` transitions over 320ms, so the needle glides.
 - `KillBar` fill: width over 340ms.
 - Ledger rows: `row-in`, 300ms, 6px slide.
-- Keypad and buttons: 80–140ms background/border/transform feedback only.
+- Keys and buttons: 80–140ms background/border/transform only; the primary plate
+  drops its offset shadow 2px on press.
 
-No bounce, no elastic, no parallax, no scroll choreography. Everything above is
-disabled wholesale under `prefers-reduced-motion: reduce`, and the page's default
-state is always the visible one — nothing is animated *in* from a hidden start on
-load.
+No bounce, no elastic, no parallax, no scroll choreography. All of it is disabled
+wholesale under `prefers-reduced-motion: reduce`, and the default state is always
+the visible one — nothing animates *in* from a hidden start on load.
 
 ## States
 
-Every interactive component has default, hover, focus-visible, active, and
+Every interactive component has default, hover, focus-visible, active and
 disabled; errors are inline notices, never alerts.
 
 | State | Treatment |
 | --- | --- |
-| Hover | `--paper-sunk` ground, or a rule that darkens to `--ink`. |
+| Hover | Plate lifts to `--ink-3`, or a hairline brightens to `--brass-2`. |
 | Focus-visible | `2px solid var(--focus)`, `offset: 3px`, on every focusable element including `<summary>`. |
-| Active | 1px translate down on buttons; primary drops its bottom shadow. |
-| Disabled | `--ink-4` text, no shadow, `cursor: default`. |
+| Active | 2px translate down; the primary plate drops its shadow. |
+| Disabled | `--chalk-4` text on `--ink-3`, no shadow, `cursor: default`. |
 | Error | `.notice[data-tone='error']`: signal wash fading to transparent, `--signal-ink` text, `role="alert"`. Never a red border. |
 | Confirm | `.notice[data-tone='confirm']` and the `采用` tag, both teal. |
-| Empty | The sensitivity field shows `—.———` in the dial and borrows the 256 eDPI scale, captioned as borrowed. The history and ledger render nothing rather than an empty shell. |
-| Loading | The save indicator (`已保存` / `保存中` / `保存失败`) is the only async state; it is text plus a dot, never a spinner. |
+| Selected | The chosen mode plate: signal border, signal wash, and a 2px inset bottom bar. |
+| Empty | The sensitivity field shows its tick row but no value; history and ledger render nothing rather than an empty shell. |
+| Loading | The save indicator (`已保存` / `保存中` / `保存失败`) is the only async state: text plus a dot, never a spinner. |
 
 ## Browser surfaces
 
-The page owns what the browser draws: `::selection` inverts to ink on paper;
-`caret-color` is signal red; the body scrollbar is thumbed in `--rule-2` with a
-paper-coloured border; `scrollbar-color`/`scrollbar-width` are declared for
-Gecko; `theme-color` is the paper ground so a phone's chrome matches the page;
-`color-scheme: light` prevents forced-dark inversion of native controls; number
-spinners are removed (`appearance: textfield`) because they are unusable at
-44px; `<summary>` markers are replaced with a drawn `+` / `−`.
+The page owns what the browser draws: `::selection` is signal red on ink;
+`caret-color` is signal red; the scrollbar is thumbed in `--brass-2` on `--void`
+with `scrollbar-color`/`scrollbar-width` declared for Gecko; `theme-color` is the
+void so a phone's chrome matches; `color-scheme: dark` stops native controls
+inverting to light; number spinners are removed (`appearance: textfield`) because
+they are unusable at 44px; `<summary>` markers are replaced with a drawn `+`/`−`.
 
 ## Do not
 
-- Do not introduce a third accent colour, a gradient, or a glow.
+- Do not introduce a fourth hue. The palette is ink, chalk, brass, and two
+  meaning colours, and that is the whole budget.
 - Do not give signal red to anything that is not the actionable number, the
-  current step, or a primary action.
-- Do not use a card as a container, nest surfaces inside surfaces, or draw a
-  coloured side border on a callout.
+  current step, a primary action, or the player's own mark on the chart.
+- Do not use an official Valorant logo, agent portrait, map image, or rank badge.
+  The game enters as authored geometry at the level of an instrument part.
+- Do not draw a second rule against `.mark`; if a section needs a divider, it is
+  the mark's.
+- Do not add a card, a rounded corner, or a nested surface.
 - Do not set a display face or a webfont: the page must render offline on the
   device it is used on.
-- Do not use icons as decoration; the only icon is the back chevron and the
-  wordmark bezel, both authored SVG.
+- Do not place an authored SVG without giving it a width and height class.
 - Do not animate anything that does not convey a state change.
