@@ -15,6 +15,36 @@ describe('pro reference roster', () => {
     expect(ROSTER_SOURCE.url).toContain('valoranthub')
   })
 
+  it('carries a country for every player', () => {
+    // Country is part of the reference: it tells the player whose number they are
+    // looking at, and a blank one would render a hole in the row.
+    for (const pro of PRO_ROSTER) {
+      expect(typeof pro.country).toBe('string')
+      expect(pro.country.length).toBeGreaterThan(0)
+      expect(pro.country).not.toMatch(/&#|&amp;|&quot;/)
+    }
+    expect(new Set(PRO_ROSTER.map((pro) => pro.country)).size).toBeGreaterThan(20)
+  })
+
+  it('ships crosshair codes that decode, and nothing else', () => {
+    const withCode = PRO_ROSTER.filter((pro) => pro.crosshair)
+    expect(withCode.length).toBeGreaterThan(400)
+    expect(ROSTER_SOURCE.withCrosshair).toBe(withCode.length)
+    for (const pro of withCode) {
+      expect(pro.crosshair.startsWith('0')).toBe(true)
+      // A stored code that cannot be drawn would be a blank glyph in the row.
+      // Empty profiles ("0") are dropped by the capture, so nothing blank ships.
+      expect(pro.crosshair).not.toBe('0')
+      expect(pro.crosshairShape).not.toBeNull()
+      expect(pro.crosshairShape.colourHex).toMatch(/^#[0-9a-f]{6}$/)
+      expect(pro.crosshairShape.shape.length).toBeGreaterThan(0)
+    }
+    // Players without a code must not carry a shape either.
+    for (const pro of PRO_ROSTER.filter((p) => !p.crosshair)) {
+      expect(pro.crosshairShape).toBeNull()
+    }
+  })
+
   it('ships no malformed rows', () => {
     for (const pro of PRO_ROSTER) {
       expect(Number.isFinite(pro.edpi)).toBe(true)

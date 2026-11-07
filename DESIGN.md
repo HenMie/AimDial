@@ -157,12 +157,34 @@ Used only on the result page's measurement column.
 
 The section label: the title and a right-aligned count on one brass hairline.
 **The mark owns the divider for its whole group.** Whatever follows it starts
-rule-less (`.mark + .history-list`, `.ledger`, `.steps-list`, `.pros-list`), so a
+rule-less (`.mark + .history-list`, `.ledger`, `.steps-list`, `.pros-table`), so a
 heading rule never stacks against a list rule — two hairlines a few pixels apart
 read as a mistake and cut the page into unrelated strips.
 
-### `KillBar`
+### Pro reference table
 
+The player's eDPI placed among published pro setups: a band over the roster's own
+p10–p90, then a `.pros-table` of the nearest players — name/team/country,
+DPI × sensitivity, eDPI, the gap to the player's number, and a crosshair cell.
+
+- **Every cell is left-aligned, including the numbers.** A reference is read down
+  a column; right-aligning eDPI would put `96` and `1208` on the same edge but
+  different digits, breaking the comparison the table exists for.
+- It is a real `<table>`: the head (`选手 / DPI × 灵敏度 / eDPI / 与你相差 / 准星`)
+  is what makes the numbers legible without repeating a unit in every row.
+- The crosshair cell holds the preview and the copy button together: the glyph is
+  what the code draws, the button hands over the code itself. A player with no
+  published code reads `无公开代码` — never a guessed glyph. **The row is the only
+  place a crosshair appears**: a second, larger plate under the table repeated the
+  same glyph and the same button for a player the table already listed, so it was
+  removed.
+- Copy reports what happened: `复制代码` → `已复制` (teal, `CheckIcon`) for 1.8s,
+  or `复制失败` in `--signal-ink` when the clipboard is refused. A silent no-op
+  would leave the player pasting the previous value.
+- Under 700px the head is hidden visually and the row re-flows into a block; the
+  eDPI cell prints its own unit from `data-label`, so nothing is lost.
+
+### `KillBar`
 A ruler-backed bar over the 30-bot round: a 1px repeating-gradient scale with a
 solid fill whose width is the kill count. Tones `ink`, `signal`, `confirm`. It
 replaces any chart library; the maximum is always 30, so bars compare down a

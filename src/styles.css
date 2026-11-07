@@ -335,23 +335,28 @@ html::-webkit-scrollbar-thumb:hover {
  * This failure has recurred: a list draws its own top rule, the section mark above
  * it draws a bottom rule, and the two land a few pixels apart — reading as a
  * mistake and cutting one section into strips. The fix is stated as a rule about
- * position rather than as a list of class names, so a new list added later is
+ * position rather than as a list of class names, so a new component added later is
  * covered without anyone remembering to extend a selector:
  *   - the direct sibling that opens a group carries no top rule, and
  *   - so does that sibling's first row.
  * Only the opening edge is affected, so rules *between* rows still do their job.
- * `:first-child` is excluded so a mark nested in its own panel is left alone. */
+ * `:first-child` is excluded so a mark nested in its own panel is left alone.
+ *
+ * Note `.ledger ol`, not `.ledger`: the ledger's rule lives on its list, and
+ * zeroing the wrapper left the second line in place. `.fold` is the same case —
+ * it carries its own top rule for when it stands alone. */
 .mark + .steps-list,
 .mark + .history-list,
-.mark + .pros-list,
-.mark + .ledger {
+.mark + .pros-table,
+.mark + .ledger ol,
+.mark + .fold {
   border-top: 0;
 }
 
 .mark + .steps-list > li:first-child,
 .mark + .history-list > li:first-child,
-.mark + .pros-list > li:first-child,
-.mark + .ledger > ol > li:first-child {
+.mark + .pros-table > tbody > tr:first-child > *,
+.mark + .ledger ol > li:first-child {
   border-top: 0;
 }
 
@@ -1932,6 +1937,18 @@ button.back svg {
   border-top: 1px solid var(--brass-dim);
 }
 
+/* A fold that opens a section sits directly under a `.mark`, which already drew
+   the rule for the group; the `.mark + .fold` rule above removes its top edge so
+   the two cannot stack. The summary then closes the gap the two edges used to
+   occupy, so the heading lands where the eye expects it rather than floating. */
+.mark + .fold {
+  margin-top: 12px;
+}
+
+.mark + .fold > summary {
+  min-height: 44px;
+}
+
 .fold + .fold {
   margin-top: -1px;
 }
@@ -2214,28 +2231,57 @@ button.back svg {
   color: var(--chalk-2);
 }
 
-.pros-caption {
-  margin: 2px 0 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--chalk-4);
-}
-
-.pros-list {
+/* A real table: these are five labelled columns of comparable facts, and the
+   column head is what makes "eDPI" legible without repeating the unit down the
+   rows. Everything is left-aligned — a reference is read down a column, and a
+   right-aligned figure would put 96 and 1208 on the same edge but different
+   digits, which is exactly the comparison the table is for. */
+.pros-table {
+  width: 100%;
   margin: clamp(22px, 3.4vw, 30px) 0 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--brass-dim);
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  text-align: left;
 }
 
-.pros-list li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: baseline;
-  gap: 6px 18px;
-  padding: 10px 0;
+.pros-table th,
+.pros-table td {
+  text-align: left;
+  vertical-align: middle;
+}
+
+.pros-table thead th {
+  padding: 0 16px 8px 0;
   border-bottom: 1px solid var(--brass-dim);
-  font-size: 0.8125rem;
+  font: 500 0.625rem/1.2 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--chalk-3);
+  white-space: nowrap;
+}
+
+.pros-table thead th:last-child,
+.pros-table td:last-child {
+  padding-right: 0;
+}
+
+.pros-table tbody th,
+.pros-table tbody td {
+  padding: 11px 16px 11px 0;
+  border-bottom: 1px solid var(--brass-dim);
+  font-weight: 400;
+}
+
+/* The name column takes whatever the numbers and the crosshair cell leave. */
+.pros-col-who {
+  width: auto;
+}
+
+.pros-who {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .pros-name {
@@ -2261,6 +2307,17 @@ button.back svg {
   text-overflow: ellipsis;
 }
 
+/* Country as drawn text, not a flag image: a flag at 11px is a smear, and the
+   name is the fact. */
+.pros-country {
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  color: var(--chalk-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .pros-setting {
   font-variant-numeric: tabular-nums;
   color: var(--chalk-2);
@@ -2274,17 +2331,73 @@ button.back svg {
   white-space: nowrap;
 }
 
-.pros-edpi small {
-  font-weight: 400;
-  font-size: 0.6875rem;
-  color: var(--chalk-4);
-}
-
 .pros-delta {
-  min-width: 4.5em;
-  text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--chalk-3);
+  white-space: nowrap;
+}
+
+/* Preview and copy sit on one line: the glyph is what the code draws, and the
+   button hands over the code itself — the two halves of one reference. */
+.pros-crosshair-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pros-crosshair {
+  flex: none;
+  display: block;
+}
+
+.pros-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 44px is the phone target size; the visible plate is the border box. */
+  min-height: 30px;
+  margin: -6px 0;
+  padding: 0 10px 0 9px;
+  background: none;
+  border: 1px solid var(--brass-dim);
+  font: 500 0.6875rem/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--chalk-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms var(--ease), border-color 120ms var(--ease), background 120ms var(--ease);
+}
+
+.pros-copy::before {
+  /* The button is 30px tall inside an 11px-padded row, so the tappable box is
+     grown vertically without moving the text. */
+  content: '';
+  position: absolute;
+  inset: -7px 0;
+}
+
+.pros-copy {
+  position: relative;
+}
+
+.pros-copy:hover {
+  color: var(--chalk);
+  border-color: var(--brass-2);
+}
+
+.pros-copy[data-state='copied'] {
+  color: var(--confirm);
+  border-color: var(--confirm);
+}
+
+.pros-copy[data-state='error'] {
+  color: var(--signal-ink);
+  border-color: var(--signal-ink);
+}
+
+.pros-no-code {
+  font-size: 0.6875rem;
+  color: var(--chalk-4);
   white-space: nowrap;
 }
 
@@ -2315,21 +2428,80 @@ button.back svg {
   color: var(--signal-ink);
 }
 
-@media (max-width: 640px) {
-  .pros-list li {
+/* Phone: five columns do not fit 390px, so the table re-flows into a per-player
+   block instead of scrolling sideways. The head is dropped (the numbers carry
+   their own units here) and the cells are relabelled from their own attributes,
+   so the markup stays one table and the layout does the adapting. */
+@media (max-width: 700px) {
+  .pros-table thead {
+    /* Hidden visually only: the cells below name their own value. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .pros-table,
+  .pros-table tbody,
+  .pros-table tr,
+  .pros-table th,
+  .pros-table td {
+    display: block;
+    width: auto;
+  }
+
+  .pros-table tbody tr {
+    display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 12px;
+    gap: 0 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--brass-dim);
+  }
+
+  .pros-table tbody th,
+  .pros-table tbody td {
+    padding: 0;
+    border: 0;
+  }
+
+  .pros-who {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .pros-delta {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+  }
+
+  /* The head is hidden here, so the eDPI cell carries its own unit. */
+  .pros-edpi::after {
+    content: ' ' attr(data-label);
+    font: 400 0.6875rem/1 var(--mono);
+    letter-spacing: 0.04em;
+    color: var(--chalk-4);
   }
 
   .pros-setting {
     grid-column: 1;
     grid-row: 2;
-    font-size: 0.75rem;
+    margin-top: 2px;
   }
 
-  .pros-delta {
-    grid-column: 2;
-    grid-row: 2;
+  .pros-edpi {
+    grid-column: 1;
+    grid-row: 3;
+    margin-top: 2px;
+  }
+
+  .pros-crosshair-cell {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-top: 8px;
   }
 }
 

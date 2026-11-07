@@ -1,30 +1,44 @@
 import roster from './prosData.js'
+import { decodeCrosshair, describeCrosshair } from './crosshair.js'
 
 /**
  * Reference roster of published pro setups, used to show the player where their
  * result sits.
  *
- * Source: ValorantHub's public pro settings table, captured 2026-11-07 (540
- * players with a published mouse DPI and in-game sensitivity). The table is
- * community-collected, so individual entries can lag a player's current setup;
- * it is sound for the *shape* of the distribution, which is all this uses.
+ * Source: ValorantHub's public pro pages (2026-11-08). The table is
+ * community-collected, so individual rows can lag a player's current setup; it
+ * is sound for the *shape* of the distribution, which is what the band uses, and
+ * for a per-player reference, which is what the nearest-player list uses.
+ *
  * Values are stored as DPI + sensitivity and multiplied here, so the sourced
- * numbers are the only thing persisted and eDPI can never drift from them.
+ * numbers are the only thing persisted and eDPI can never drift from them. The
+ * crosshair is decoded here rather than pre-rendered: the code is the source,
+ * and a glyph drawn from it cannot disagree with what the game will import.
  */
-export const PRO_ROSTER = Object.freeze(roster.map((entry) => Object.freeze({
-  name: entry.n,
-  team: entry.t,
-  country: entry.c,
-  dpi: entry.d,
-  sens: entry.s,
-  edpi: entry.d * entry.s,
-})))
+export const PRO_ROSTER = Object.freeze(roster.map((entry) => {
+  const decoded = entry.x ? decodeCrosshair(entry.x) : null
+  return Object.freeze({
+    name: entry.n,
+    team: entry.t,
+    country: entry.c,
+    dpi: entry.d,
+    sens: entry.s,
+    edpi: entry.d * entry.s,
+    crosshair: entry.x ?? null,
+    // What the code draws, flattened for the list row and the code plate.
+    crosshairShape: decoded ? describeCrosshair(decoded) : null,
+    // The decoded profile itself, used by the plate to draw the arms at their
+    // real lengths instead of re-deriving them from the summary.
+    crosshairCode: decoded,
+  })
+}))
 
 export const ROSTER_SOURCE = {
   label: 'ValorantHub',
   url: 'https://valoranthub.com/proplayers',
-  captured: '2026-11-07',
+  captured: '2026-11-08',
   count: PRO_ROSTER.length,
+  withCrosshair: PRO_ROSTER.filter((pro) => pro.crosshair).length,
 }
 
 /**
@@ -35,10 +49,11 @@ export const ROSTER_SOURCE = {
  * list with high-eDPI players. `tolerance` bounds how far the list may reach —
  * a reference that is 80% away is not a comparison, it is a different game.
  */
-export function nearestPros(edpi, { limit = 5, tolerance = 0.12 } = {}) {
+export function nearestPros(edpi, { limit = 5, tolerance = 0.12, requireCrosshair = false } = {}) {
   if (!Number.isFinite(edpi) || edpi <= 0) return []
   const reach = Math.log(1 + tolerance)
   return PRO_ROSTER
+    .filter((pro) => !requireCrosshair || pro.crosshair)
     .map((pro) => ({ ...pro, distance: Math.abs(Math.log(pro.edpi / edpi)) }))
     .filter((pro) => pro.distance <= reach)
     .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
