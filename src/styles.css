@@ -52,7 +52,6 @@
   --step-5: clamp(3.5rem, 12vw, 5.5rem);
 
   --gutter: clamp(20px, 4vw, 44px);
-  --measure: 68ch;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   color-scheme: dark;
@@ -331,11 +330,28 @@ html::-webkit-scrollbar-thumb:hover {
   border-bottom: 1px solid var(--brass-dim);
 }
 
-.mark + .history-list,
+/* One rule per group, and the mark owns it.
+ *
+ * This failure has recurred: a list draws its own top rule, the section mark above
+ * it draws a bottom rule, and the two land a few pixels apart — reading as a
+ * mistake and cutting one section into strips. The fix is stated as a rule about
+ * position rather than as a list of class names, so a new list added later is
+ * covered without anyone remembering to extend a selector:
+ *   - the direct sibling that opens a group carries no top rule, and
+ *   - so does that sibling's first row.
+ * Only the opening edge is affected, so rules *between* rows still do their job.
+ * `:first-child` is excluded so a mark nested in its own panel is left alone. */
 .mark + .steps-list,
+.mark + .history-list,
 .mark + .pros-list,
-.mark + .ledger,
-.mark + .ledger ol {
+.mark + .ledger {
+  border-top: 0;
+}
+
+.mark + .steps-list > li:first-child,
+.mark + .history-list > li:first-child,
+.mark + .pros-list > li:first-child,
+.mark + .ledger > ol > li:first-child {
   border-top: 0;
 }
 
@@ -799,7 +815,10 @@ html::-webkit-scrollbar-thumb:hover {
 /* The dial is an astrolabe face: a lit instrument sunk into the chart's ground,
    its scale in brass, its marks in data white, its needle in signal red. */
 .dial {
-  --pad: 26px;
+  /* Wider than the old 26px: the outermost tick labels and the first and last
+     value labels both hang on the scale's ends, and at 26px they touched the
+     frame. 34px gives them room without moving the scale itself. */
+  --pad: 34px;
   position: relative;
   padding: 20px 0 0;
   border: 1px solid var(--brass-2);
@@ -810,9 +829,14 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 /* The frame sits inside the caliper tabs, so nothing on the scale can be
- * clipped by the page edge at narrow widths. */
-.dial > * {
-  margin-inline: var(--pad);
+ * clipped by the page edge at narrow widths.
+ *
+ * The inset is padding on the container, not a margin on each child: children set
+ * their own `margin: 0` as part of their own layout, and a margin-based inset was
+ * silently cancelled by every one of them — which is how the first and last value
+ * labels ended up 1px from the border. Padding cannot be overridden that way. */
+.dial-inner {
+  padding-inline: var(--pad);
 }
 
 .dial::before,
@@ -896,17 +920,43 @@ html::-webkit-scrollbar-thumb:hover {
   vector-effect: non-scaling-stroke;
 }
 
+/* The scale is stretched horizontally to fill the frame, so a shape drawn inside
+   it gets squashed: a 45°-rotated square turned into a flat lozenge. The needle is
+   safe (a vertical line cannot distort), and the head lives in its own layer as a
+   CSS shape, where it keeps its real proportions. */
 .dial-marker .dial-needle {
   stroke: var(--chalk);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
-.dial-marker .dial-cap {
-  fill: var(--void);
+/* The reading head: a kite that tapers to a point on the scale, drawn as a small
+   fixed-size SVG so its proportions survive the scale's horizontal stretch. */
+.dial-heads {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dial-head {
+  position: absolute;
+  top: 1px;
+  display: block;
+  margin-left: -6px;
+  overflow: visible;
+  transition: left 320ms var(--ease);
+}
+
+.dial-head-body {
+  fill: var(--ink-0);
   stroke: var(--chalk);
-  stroke-width: 1.2;
-  vector-effect: non-scaling-stroke;
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.dial-head-pin {
+  fill: var(--chalk);
+  stroke: none;
 }
 
 .dial-marker[data-kind='base'] .dial-needle {
@@ -914,8 +964,13 @@ html::-webkit-scrollbar-thumb:hover {
   stroke-width: 2;
 }
 
-.dial-marker[data-kind='base'] .dial-cap {
+.dial-head[data-kind='base'] .dial-head-body {
   fill: var(--chalk);
+  stroke: var(--chalk);
+}
+
+.dial-head[data-kind='base'] .dial-head-pin {
+  fill: var(--ink-0);
 }
 
 .dial-marker[data-kind='active'] .dial-needle {
@@ -923,24 +978,39 @@ html::-webkit-scrollbar-thumb:hover {
   stroke-width: 2.4;
 }
 
-.dial-marker[data-kind='active'] .dial-cap {
+.dial-head[data-kind='active'] .dial-head-body {
   fill: var(--signal);
   stroke: var(--signal);
+}
+
+.dial-head[data-kind='active'] .dial-head-pin {
+  fill: var(--ink-0);
+}
+
+.dial-head[data-kind='active'] {
+  filter: drop-shadow(0 0 3px rgba(255, 70, 85, 0.55));
 }
 
 .dial-marker[data-kind='confirm'] .dial-needle {
   stroke: var(--confirm);
 }
 
-.dial-marker[data-kind='confirm'] .dial-cap {
+.dial-head[data-kind='confirm'] .dial-head-body {
   fill: var(--confirm);
   stroke: var(--confirm);
 }
 
+.dial-head[data-kind='confirm'] .dial-head-pin {
+  fill: var(--ink-0);
+}
+
+/* The scale labels and the value row below them are two separate bands that must
+   never touch: a superscripted value ("0.297×2") grows upward into the band above,
+   so the band needs to be taller than its text and the gap below it real. */
 .dial-ticks {
   position: relative;
-  height: 1.1rem;
-  margin: 2px 0 0;
+  height: 1.35rem;
+  margin: 4px 0 0;
 }
 
 .dial-tick-label {
@@ -960,13 +1030,23 @@ html::-webkit-scrollbar-thumb:hover {
   transform: translateX(-100%);
 }
 
+/* Inset comes from .dial-inner's padding now, so this only sets its own box.
+   The top margin is the separation from the scale labels above: without it a
+   label at the same horizontal position as a tick label reads as one block. */
 .dial-marks {
   position: relative;
   display: block;
   height: 3.1rem;
-  margin: 0;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
+}
+
+/* Two rows when a sweep puts labels closer than a type width apart. The second
+   row is created here rather than by hiding labels: hidden numbers left the scale
+   covered in unexplained marks. */
+.dial-marks[data-rows='2'] {
+  height: 4.5rem;
 }
 
 .dial-mark {
@@ -978,6 +1058,10 @@ html::-webkit-scrollbar-thumb:hover {
   gap: 1px;
   transform: translateX(-50%);
   transition: left 320ms var(--ease);
+}
+
+.dial-mark[data-row='1'] {
+  top: 1.4rem;
 }
 
 .dial-mark[data-anchor='start'] {
@@ -1012,10 +1096,16 @@ html::-webkit-scrollbar-thumb:hover {
   text-underline-offset: 3px;
 }
 
+/* The repeat count rides beside the value, not above it: `vertical-align: super`
+   grew the line box upward into the scale labels, which is what made "0.297×2"
+   collide with "×1.5". Positioned instead, so it cannot affect line height. */
 .dial-mark-value sup {
+  position: relative;
+  top: -0.35em;
+  margin-left: 1px;
   font-size: 0.625rem;
   font-weight: 500;
-  vertical-align: super;
+  line-height: 0;
   color: var(--chalk-3);
 }
 
@@ -1039,6 +1129,64 @@ html::-webkit-scrollbar-thumb:hover {
 .dial-reference .num {
   color: var(--chalk-2);
   font-weight: 600;
+}
+
+/* The mark legend: the scale's vocabulary, written out once under it. Each
+   swatch is the same diamond the scale draws, so the connection needs no words. */
+.dial-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 10px 0 4px;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--chalk-3);
+}
+
+.dial-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+/* A 9px square rotated 45° is exactly the cap drawn on the scale. */
+.dial-legend-mark {
+  /* The same kite the scale draws, at legend size: a legend swatch that does not
+     match the mark it explains is decoration, not a key. */
+  flex: none;
+  overflow: visible;
+}
+
+.dial-legend-shape {
+  fill: var(--ink-0);
+  stroke: var(--chalk);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.dial-legend li[data-kind='base'] .dial-legend-shape {
+  fill: var(--chalk);
+  stroke: var(--chalk);
+}
+
+.dial-legend li[data-kind='active'] .dial-legend-shape {
+  fill: var(--signal);
+  stroke: var(--signal);
+}
+
+.dial-legend li[data-kind='confirm'] .dial-legend-shape {
+  fill: var(--confirm);
+  stroke: var(--confirm);
+}
+
+.dial-legend li[data-kind='active'] {
+  color: var(--signal-ink);
+}
+
+.dial-legend li[data-kind='confirm'] {
+  color: var(--confirm-ink);
 }
 
 /* ---------- fields ---------- */
@@ -1140,6 +1288,15 @@ html::-webkit-scrollbar-thumb:hover {
 
 /* Presets are a ruler, not a toggle row: they sit on a tick line under the
  * field and only mark which position the current value occupies. */
+
+/* The field's own bottom rule IS the ruler's baseline, so the tick row must not
+   draw a second one 8px below it — that pair reads as a mistake. Ticks hang off
+   the field's rule; the row only carries them. */
+.input-shell + .ticks,
+.hero-input + .ticks {
+  border-top: 0;
+}
+
 .ticks {
   display: flex;
   gap: 0;
@@ -1477,10 +1634,12 @@ button.back svg {
   font-weight: 500;
 }
 
+/* The standing rule sits in the instruction column, whose width is already set by
+   the grid. A second cap here (it was 38ch) only wrapped the sentence early and
+   left dead space to its right — the column itself is the measure. */
 .standing-rule {
   margin: 0 0 16px;
   padding: 0;
-  max-width: 38ch;
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--chalk-3);
@@ -1591,7 +1750,9 @@ button.back svg {
   font-size: 0.875rem;
   line-height: 1.55;
   color: var(--chalk-2);
-  max-width: 34ch;
+  /* No measure cap: the instruction column already sets the width, and a 34ch cap
+     broke "打倒 30 个 bot" onto a second line with empty space beside it. */
+  text-wrap: pretty;
 }
 
 .target-value p .num {
@@ -1844,7 +2005,13 @@ button.back svg {
 
 .fold-body p {
   margin: 0 0 10px;
-  max-width: var(--measure);
+  /* These are one- and two-sentence labels, not prose being read at length, so
+     the measure can be generous. A ch cap here bought nothing and cost half the
+     column: at 74ch the text stopped at 558px inside a 1032px box. 118ch keeps a
+     very long line from becoming unreadable on a wide monitor while letting
+     normal copy fill the row. */
+  max-width: 118ch;
+  text-wrap: pretty;
 }
 
 .fold-body p:last-child {
@@ -2388,25 +2555,41 @@ button.back svg {
   border-top: 1px solid var(--brass-dim);
 }
 
+/* Each step is one row: number in the margin, the explanation, then its figure
+   as a second column. The figures sit beside their text rather than in plates
+   below it, so four steps read as one four-stage loop instead of four cards. */
 .steps-list > li {
   display: grid;
-  grid-template-columns: 3.25rem minmax(0, 1fr);
-  gap: 0 16px;
-  padding: 18px 0;
+  grid-template-columns: 3.25rem minmax(0, 1fr) minmax(0, 21rem);
+  align-items: center;
+  gap: 0 clamp(16px, 3vw, 36px);
+  padding: clamp(18px, 2.6vw, 26px) 0;
   border-bottom: 1px solid var(--brass-dim);
   counter-increment: method;
 }
 
+/* No rule above the first row. The section mark's own bottom rule is the single
+   line that opens this group; a top border here would sit a few pixels under it
+   and read as a doubled hairline. */
+.steps-list > li:first-child {
+  border-top: 0;
+}
+
+/* The step number is a chart coordinate, not a chapter heading: small, brass,
+   hung in the margin. */
 .steps-list > li::before {
   content: counter(method, decimal-leading-zero);
-  font: 500 0.6875rem/1.9 var(--mono);
-  letter-spacing: 0.06em;
-  color: var(--signal);
+  align-self: start;
+  padding-top: 3px;
+  font: 500 0.6875rem/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--brass);
 }
 
 .step-body h3 {
-  margin: 0 0 5px;
+  margin: 0 0 6px;
   font: 600 1rem/1.35 var(--sans);
+  color: var(--chalk);
   text-wrap: balance;
 }
 
@@ -2415,7 +2598,7 @@ button.back svg {
   font-size: 0.9375rem;
   line-height: 1.65;
   color: var(--chalk-2);
-  max-width: var(--measure);
+  max-width: 46ch;
 }
 
 .step-body .num {
@@ -2423,17 +2606,11 @@ button.back svg {
   font-weight: 600;
 }
 
+/* The figure is the row's second column, not a plate under the text: no
+   background and no border, so the drawing floats on the chart ground and the
+   row hairline does the dividing. */
 .step-figure {
-  margin-top: 14px;
-  padding: 14px 16px 12px;
-  background: var(--ink-1);
-  border: 1px solid var(--brass-dim);
-}
-
-.step-figure figcaption {
-  margin-top: 8px;
-  font: 400 0.6875rem/1.5 var(--mono);
-  color: var(--chalk-3);
+  min-width: 0;
 }
 
 .step-figure svg {
@@ -2443,25 +2620,54 @@ button.back svg {
   overflow: visible;
 }
 
-/* the four sketches share one vocabulary: ink rail, red measure, teal result */
-.fig-rail {
-  stroke: var(--chalk-3);
-  stroke-width: 1;
-}
+/* ---------- figure marks ----------
+ * Four figures, four drawing devices. What they share is only the grammar
+ * underneath: a ruled axis, a measured span, and data marks. Nothing here is a
+ * plate, a box or a card — these are marks on a chart. */
 
-.fig-rail-strong {
-  stroke: var(--chalk);
-  stroke-width: 1.4;
+.fig-axis {
+  stroke: var(--brass-dim);
+  stroke-width: 1;
 }
 
 .fig-tick {
   stroke: var(--chalk-3);
+  stroke-width: 0.8;
+  opacity: 0.5;
+}
+
+.fig-tick.is-major {
+  stroke: var(--brass-2);
+  stroke-width: 1;
+  opacity: 0.9;
+}
+
+/* A measured span: the caliper bracketing what a round covers. */
+.fig-caliper {
+  stroke: var(--signal);
+  stroke-width: 1.2;
+  fill: none;
+  opacity: 0.85;
+}
+
+.fig-leader {
+  stroke: var(--chalk-3);
+  stroke-width: 0.9;
+}
+
+.fig-stem {
+  stroke: var(--chalk-3);
   stroke-width: 1;
 }
 
+.fig-stem.is-signal {
+  stroke: var(--signal);
+  stroke-width: 1.4;
+}
+
 .fig-dot {
-  fill: var(--chalk-2);
-  stroke: var(--chalk);
+  fill: var(--void);
+  stroke: var(--chalk-2);
   stroke-width: 1.4;
 }
 
@@ -2472,6 +2678,16 @@ button.back svg {
 
 .fig-dot.is-ink {
   fill: var(--chalk);
+  stroke: var(--chalk);
+}
+
+/* A rung of the ladder: its length IS the physical distance. */
+.fig-rung {
+  fill: var(--chalk-4);
+}
+
+.fig-rung.is-signal {
+  fill: var(--signal);
 }
 
 .fig-label {
@@ -2485,33 +2701,6 @@ button.back svg {
 
 .fig-label.is-muted {
   fill: var(--chalk-3);
-}
-
-.fig-bracket {
-  stroke: var(--signal);
-  stroke-width: 1.2;
-  fill: none;
-}
-
-.fig-box {
-  fill: var(--confirm-wash);
-  stroke: var(--confirm);
-  stroke-width: 1;
-}
-
-.fig-bar {
-  fill: var(--chalk);
-  opacity: 0.86;
-}
-
-.fig-bar.is-signal {
-  fill: var(--signal);
-  opacity: 1;
-}
-
-.fig-bar.is-muted {
-  fill: var(--chalk-4);
-  opacity: 1;
 }
 
 /* ---------- footer ---------- */
@@ -2721,6 +2910,15 @@ button.back svg {
     display: none;
   }
 
+  .dial {
+    --pad: 30px;
+  }
+
+  .dial-legend {
+    gap: 5px 14px;
+    font-size: 0.6875rem;
+  }
+
   .stage {
     padding-top: 22px;
   }
@@ -2755,8 +2953,10 @@ button.back svg {
     line-height: 1.45;
   }
 
+  /* The run screen already hides the whole tick row on phones (`.run .dial-ticks`
+     below), so the scale's range is carried by the value labels instead. */
   .run .dial {
-    --pad: 12px;
+    --pad: 26px;
     padding-top: 12px;
   }
 
@@ -2911,9 +3111,34 @@ button.back svg {
     display: none;
   }
 
+  /* Phone: the figure cannot sit beside the text, so it stacks under it — but
+     back to full width and with its own breathing room, not squeezed into a
+     third column that no longer exists. */
   .steps-list > li {
     grid-template-columns: 2.4rem minmax(0, 1fr);
-    gap: 0 10px;
+    align-items: start;
+    gap: 12px 10px;
+  }
+
+  .steps-list > li::before {
+    grid-column: 1;
+    grid-row: 1;
+    padding-top: 2px;
+  }
+
+  .step-body {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .step-figure {
+    grid-column: 2;
+    grid-row: 2;
+    margin-top: 4px;
+  }
+
+  .step-body p {
+    max-width: none;
   }
 
   .resume {

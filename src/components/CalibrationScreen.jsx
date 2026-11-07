@@ -250,18 +250,23 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
           ) : null}
 
           {/* The decision rule is standing copy, not history: without it a player
-              has no idea how close this round has to be to count. */}
+              has no idea how close this round has to be to count. Each line is a
+              single JSX text run — a source newline inside Chinese copy collapses
+              to a space and opens a gap mid-sentence. */}
           <p className="standing-rule">
             {plan.phase === 'confirm' ? (
               <>
-                复查阶段：和 <span className="num">{base.toFixed(3)}</span> 交错打{' '}
-                <span className="num">{CONFIRM_ROUNDS}</span> 轮，每一对都要领先、
-                平均多杀 <span className="num">{session.minGain}</span> 个以上，新档才会替换基准。
+                {'复查阶段：和 '}
+                <span className="num">{base.toFixed(3)}</span>
+                {' 交错打 '}
+                <span className="num">{CONFIRM_ROUNDS}</span>
+                {' 轮，每一对都要领先、平均多杀 '}
+                <span className="num">{session.minGain}</span>
+                {' 个以上，新档才会替换基准。'}
               </>
             ) : plan.phase === 'sweep' ? (
               <>
-                粗扫阶段：把这一圈的数值各打一轮，先找出手感最接近的范围；
-                全部打完后，成绩最好的那一档会成为新起点。
+                粗扫阶段：把这一圈的数值各打一轮，先找出手感最接近的范围；全部打完后，成绩最好的那一档会成为新起点。
               </>
             ) : (
               <>
@@ -321,10 +326,14 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         </summary>
         <div className="fold-body">
           <p>{plan.message}</p>
+          {/* Kept on one source line: JSX collapses the newline between two text
+              lines into a space, which showed up mid-sentence in Chinese. */}
           <p>
-            当前基准为 <span className="num">{session.incumbent.toFixed(3)}</span>。新档位要在每一对交错对比中
-            都领先、平均多击杀 <span className="num">{session.minGain}</span> 个，才会替换基准。测试期间请
-            保持 DPI、武器、站位与护甲一致。
+            {'当前基准为 '}
+            <span className="num">{session.incumbent.toFixed(3)}</span>
+            {'。新档位要在每一对交错对比中都领先、平均多击杀 '}
+            <span className="num">{session.minGain}</span>
+            {' 个，才会替换基准。测试期间请保持 DPI、武器、站位与护甲一致。'}
           </p>
         </div>
       </details>

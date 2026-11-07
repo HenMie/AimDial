@@ -18,7 +18,7 @@ data on top. The page matches that room rather than glowing cream-white into it.
 | `#/setup` (screens `01`) | Operate | Two inputs and one action; the plate previews the bracket the run will test. |
 | `#/run` (screen `02`) | Operate | Repeated data entry mid-game-session, often one-handed on a phone. |
 | `#/result` (screen `03`) | Read | The player scans a recommendation, its evidence, and where it sits among pros. |
-| Method section (home) | Read | Four explanatory steps with drawn figures. |
+| Method section (home) | Read | Four explanatory steps, each figure beside its text. |
 
 Persuade does not appear anywhere. There is nothing to sell and no visitor to
 convert; a marketing register here would be a costume.
@@ -132,12 +132,18 @@ bracket's base, so candidates sit at the same spacing whatever the base is.
   `--brass-2`. It reads as a lit instrument sunk into the chart, not a card.
 - Ticks: 11 stops, five *major* and printed (`×0.5`, `×0.75`, `×1`, `×1.25`,
   `×1.5`) — whole fractions only.
-- Markers: a needle plus a diamond cap per tested setting. Four kinds — `base`
-  (chalk, solid cap), `candidate` (chalk, hollow), `active` (signal red, the
-  setting you are on), `confirm` (teal, a confirmed winner). Duplicates collapse
-  into a subscript (`×2`); a live kind wins over `base` at the same position.
-- Values print as three-decimal numerals under their needle, with `data-anchor`
-  flipping the outermost labels inward so nothing clips.
+- Markers: a needle plus a diamond cap per tested setting. Four kinds —
+  `base` (chalk, solid cap), `candidate` (chalk, hollow), `active` (signal red,
+  the setting you are on), `confirm` (teal, a confirmed winner). Duplicates
+  collapse into a subscript (`×2`).
+- **Every marker carries its own value, and the four kinds are named in a legend
+  under the scale.** Hiding a label because two of them were close left the scale
+  covered in unexplained diamonds — the reader could see six marks and not know a
+  single number. Colliding labels move to a second row instead. A shape that
+  carries information and no key is noise, however elegant.
+- Values print as three-decimal numerals under their needle, clamped inside the
+  frame: the outer marks sit at 0% and 100% of the scale, so the first and last
+  labels anchor to their own inner edge rather than centring past it.
 - `.is-compact` hides the big readout (visually only, still announced) on the run
   screen, where the same number is already the page heading.
 - The frame is a caliper: two short brass tabs outside the box, `--pad` inside.
@@ -169,6 +175,32 @@ The run screen's input: a two-digit display plus a 10-key grid (`1–9`, 清除,
 Digits are taken from the `document` keydown as well, skipping real form fields,
 so a desktop player can type `24` ⏎ without finding a field. The maximum is 30
 and the app refuses anything above it inline rather than truncating.
+
+### Method figures
+
+Four figures explaining one four-stage loop. They share the palette and the
+10px mono label voice, and **nothing else** — no shared rail, no shared box, no
+shared plate. Each exploits a different drawing device, so the four are
+distinguishable by silhouette while scrolling:
+
+| Step | Device | What the shape asserts |
+| --- | --- | --- |
+| 01 screen | A graduated strip with a caliper span | Three settings on a continuous axis, and the span one round covers |
+| 02 confirm | A timeline of six ticks in three bracketed pairs | A sequence in time, and why six rounds mean three verdicts |
+| 03 narrow | A stacked ladder where length is distance | The halving of hand movement, read as halving |
+| 04 gate | A verdict table with column heads | The accept rule applied across two real pairwise differences |
+
+Rules for this section:
+
+- **No plate per step.** The rows are separated by their own hairlines and the
+  figure sits beside its text, not in a box below it. Boxing each step turned one
+  loop into four identical cards.
+- **Every figure must assert a number, not a motto.** Step 04 originally drew a
+  threshold with two dots and the caption "门槛 +1 杀" while showing no value
+  crossing it; it now shows the two pairwise differences that decide the verdict.
+- Labels sit in their own column so none can land on a bar, a dot, or a rule.
+- Nothing in a figure repeats a label already in the same row: column heads carry
+  the pairing, so rows do not repeat "第 1 对".
 
 ## Layout
 

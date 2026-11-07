@@ -152,8 +152,7 @@ export default function SetupScreen({ onStart, initial }) {
 
       {discover ? (
         <p className="preview-slot mode-note">
-          不需要填现在的灵敏度。测试会从职业选手中最常见的数值开始，逐级往两边试，
-          找到大致范围后再细调。
+          不需要填现在的灵敏度。测试会从职业选手中最常见的数值开始，逐级往两边试，找到大致范围后再细调。
         </p>
       ) : (
         <BracketPreview className="preview-slot" marks={marks} placeholder={!calibratedInput} />

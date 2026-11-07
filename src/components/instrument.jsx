@@ -30,6 +30,41 @@ export function dialPercent(ratio) {
 const tickLabel = (stop) =>
   stop === 1 ? '×1' : `×${String(stop).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')}`
 
+/**
+ * Place value labels without dropping any.
+ *
+ * Labels that would collide are pushed to a second row instead of being hidden:
+ * a sweep puts six settings close together, and hiding their numbers left the
+ * scale covered in unexplained diamonds. Greedy left-to-right placement, two
+ * rows, and every label clamped inside the frame — the outer marks sit at 0% and
+ * 100% of the scale, so anchoring alone would push their text past the edge.
+ */
+function placeLabels(placed, minGap = 13) {
+  const rows = [[], []]
+  let lastAt = -Infinity
+  let row = 0
+  for (const marker of placed) {
+    if (marker.at - lastAt < minGap) row = row === 0 ? 1 : 0
+    rows[row].push(marker)
+    lastAt = marker.at
+  }
+  return placed.map((marker) => {
+    const r = rows[0].includes(marker) ? 0 : 1
+    // Left of 8% anchors to its own left edge, right of 92% to its right edge,
+    // everything else is centred. The frame has padding, so 8/92 never clips.
+    const anchor = marker.at < 8 ? 'start' : marker.at > 92 ? 'end' : 'middle'
+    return { ...marker, row: r, anchor }
+  })
+}
+
+/** What the four marks on the scale mean. A shape nobody can decode is noise. */
+const MARK_LEGEND = [
+  { kind: 'base', label: '基准' },
+  { kind: 'candidate', label: '待测' },
+  { kind: 'active', label: '这一轮' },
+  { kind: 'confirm', label: '已确认' },
+]
+
 export function Dial({
   base = 0.18,
   markers = [],
@@ -58,33 +93,30 @@ export function Dial({
     } else byRatio.set(ratio, { ...marker, repeats: 0 })
   })
   const ghostRatio = ratioOf(ghost, base)
-  const placed = [...byRatio.values()]
-    // Outermost labels anchor inward so nothing hangs past the frame.
-    .map((marker) => {
-      const at = project(ratioOf(marker.value, base)) * 100
-      return { ...marker, at, anchor: at < 6 ? 'start' : at > 94 ? 'end' : 'middle' }
-    })
-    .sort((a, b) => a.at - b.at)
+  const placed = placeLabels([...byRatio.values()]
+    .map((marker) => ({ ...marker, at: project(ratioOf(marker.value, base)) * 100 }))
+    .sort((a, b) => a.at - b.at))
 
-  // The thin end of the scale would put two labels on top of each other. When
-  // that happens the dial keeps drawing and hands its numbers to the list,
-  // which always has room.
-  const crowded = placed.some((marker, i) => i > 0 && marker.at - placed[i - 1].at < 17)
-  const showValues = placed.length > 0 && !crowded
+  const showValues = placed.length > 0
 
   return (
     <div className={`dial${compact ? ' is-compact' : ''}${className ? ` ${className}` : ''}`}>
-      <div className="dial-readout">
-        {readout != null && <span className="dial-value num">{readout}</span>}
-        {readoutCaption && <span className="dial-caption">{readoutCaption}</span>}
-      </div>
-      <div className="dial-frame">
+      <div className="dial-inner">
+        <div className="dial-readout">
+          {readout != null && <span className="dial-value num">{readout}</span>}
+          {readoutCaption && <span className="dial-caption">{readoutCaption}</span>}
+        </div>
+        <div className="dial-frame">
+        {/* The scale is stretched horizontally to fill the frame, so anything
+            with a shape of its own cannot live inside it: a rotated square became
+            a lozenge, and a tapered blade became a spindle. The needles are drawn
+            on the stretched canvas (a vertical line is safe), and the heads ride
+            in their own fixed-aspect layer above it. */}
         <svg
           className="dial-svg"
           viewBox="0 0 600 120"
           preserveAspectRatio="none"
-          role="img"
-          aria-labelledby={shell}
+          aria-hidden="true"
         >
         <title id={shell}>
           刻度盘，基准 {base.toFixed(3)}，
@@ -117,12 +149,41 @@ export function Dial({
           const x = marker.at * 6
           return (
             <g key={marker.value} className="dial-marker" data-kind={marker.kind ?? 'candidate'}>
-              <line x1={x} x2={x} y1="50" y2="112" className="dial-needle" />
-              <rect x={x - 4.5} y="20" width="9" height="9" className="dial-cap" transform={`rotate(45 ${x} 24.5)`} />
+              {/* The head is a fixed 18px layer pinned to the frame top, and the
+                  canvas is 120 units tall over that same box, so the tip sits at
+                  18/96 * 120 = 22.5 units. The shaft begins a few units below that:
+                  a real pointer's tip and its needle are separate parts, and the
+                  hairline of ground between them is what reads as machined rather
+                  than as one solid shape. */}
+              <line x1={x} x2={x} y1="27" y2="112" className="dial-needle" />
             </g>
           )
         })}
         </svg>
+        {/* Heads in their own layer, positioned as percentages so they land on the
+            same x as their needles without inheriting the horizontal stretch. Each
+            head is a tiny fixed-size SVG, so its shape keeps real proportions. */}
+        <div className="dial-heads" aria-hidden="true">
+          {placed.map((marker) => (
+            <svg
+              key={marker.value}
+              className="dial-head"
+              data-kind={marker.kind ?? 'candidate'}
+              style={{ left: `${marker.at}%` }}
+              viewBox="0 0 12 18"
+              width="12"
+              height="18"
+            >
+              {/* A kite: shoulders high, tapering to a point that meets the scale. */}
+              <path
+                className="dial-head-body"
+                d="M6 17.2 L0.8 5.6 L6 0.8 L11.2 5.6 Z"
+                vectorEffect="non-scaling-stroke"
+              />
+              <circle className="dial-head-pin" cx="6" cy="5.6" r="1.3" />
+            </svg>
+          ))}
+        </div>
       </div>
       <div className="dial-ticks" aria-hidden="true">
         {MAJOR_RATIOS.map((stop) => {
@@ -140,13 +201,14 @@ export function Dial({
         })}
       </div>
       {showValues && (
-        <ol className="dial-marks">
+        <ol className="dial-marks" data-rows={placed.some((m) => m.row === 1) ? 2 : 1}>
           {placed.map((marker) => (
             <li
               key={marker.value}
               className="dial-mark"
               data-kind={marker.kind ?? 'candidate'}
               data-anchor={marker.anchor}
+              data-row={marker.row}
               style={{ '--at': `${marker.at}%` }}
             >
               <span className="dial-mark-value num">
@@ -158,6 +220,20 @@ export function Dial({
           ))}
         </ol>
       )}
+      {/* The scale's vocabulary, spelled out. Without this the four marks are
+          just shapes: a reader cannot tell a setting still to be tested from one
+          the search already accepted. Each swatch is the same kite the scale
+          draws, so the legend maps to the marks without a second explanation. */}
+      <ul className="dial-legend">
+        {MARK_LEGEND.map((entry) => (
+          <li key={entry.kind} data-kind={entry.kind}>
+            <svg className="dial-legend-mark" viewBox="0 0 12 18" width="9" height="13" aria-hidden="true">
+              <path className="dial-legend-shape" d="M6 17.2 L0.8 5.6 L6 0.8 L11.2 5.6 Z" vectorEffect="non-scaling-stroke" />
+            </svg>
+            {entry.label}
+          </li>
+        ))}
+      </ul>
       {referenceTicks.length > 0 && (
         <p className="dial-reference">
           {referenceTicks.map((tick) => (
@@ -167,6 +243,7 @@ export function Dial({
           ))}
         </p>
       )}
+      </div>
     </div>
   )
 }
