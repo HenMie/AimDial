@@ -8,10 +8,10 @@ const TICK_STOPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5]
 // Only whole fractions get a printed label: ×0.5, ×0.75, ×1, ×1.25, ×1.5. Every
 // other stop is a bare tick, so the scale never reads as a row of fractions.
 const MAJOR_RATIOS = [0.5, 0.75, 1, 1.25, 1.5]
-const STEP = 1.25
 
-// Logarithmic, so equal factors land at equal distances: the ±1.25 bracket sits
-// on the same spacing whatever the base is.
+// Logarithmic, so equal factors land at equal distances. The scale spans ×0.5 to
+// ×1.5 around the bracket's base, which covers every candidate any ladder emits
+// (the coarse rung tops out at ±25% of the player's own value).
 const project = (ratio) => Math.log(ratio / 0.5) / Math.log(3)
 
 const clampRatio = (ratio) => Math.min(1.5, Math.max(0.5, ratio))
@@ -212,5 +212,3 @@ export function KillBar({ value, max = 30, tone = 'ink' }) {
     </span>
   )
 }
-
-export { STEP }

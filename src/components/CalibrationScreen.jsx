@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCalibration } from '../hooks/useCalibration.js'
-import { BOTS_PER_RUN, parseKills } from '../lib/rangeCalibration.js'
+import { BOTS_PER_RUN, CONFIRM_ROUNDS, parseKills, isDiscovery } from '../lib/rangeCalibration.js'
 import { KillBar, Dial } from './instrument.jsx'
 
-const LEVEL_NAMES = ['粗测', '再收紧', '精调']
+const LEVEL_NAMES = ['粗测', '再收紧', '精调', '最细']
 
-function phaseLabel(plan, level) {
-  return plan.phase === 'confirm' ? '复查' : LEVEL_NAMES[level] ?? '精调'
+function phaseLabel(plan, level, mode) {
+  if (plan.phase === 'confirm') return '复查'
+  if (plan.phase === 'sweep') return '粗扫'
+  const name = LEVEL_NAMES[level] ?? '精调'
+  return isDiscovery(mode) ? `${name}·细调` : name
 }
 
 /**
@@ -50,7 +53,8 @@ function KillPad({ value, onDigit, onClear, onSubmit, busy }) {
         </output>
         <span>/ {BOTS_PER_RUN}</span>
       </div>
-      <p className="pad-note">点数字，或者直接用键盘打。</p>      <div className="pad-keys">
+      <p className="pad-note">点数字，或者直接用键盘打。</p>
+      <div className="pad-keys">
         {digits.map((digit) => (
           <button key={digit} type="button" onClick={() => onDigit(digit)} aria-label={`输入 ${digit}`}>
             {digit}
@@ -74,7 +78,6 @@ function KillPad({ value, onDigit, onClear, onSubmit, busy }) {
       <button type="button" className="primary" onClick={onSubmit} disabled={busy}>
         记录本轮
       </button>
-      <p className="pad-note">成绩会立刻存到这台设备，中途关掉页面也能接着测。</p>
     </div>
   )
 }
@@ -98,6 +101,9 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
   const progressDone = plan.cursor
   const progressTotal = plan.schedule.length
   const base = plan.baseline ?? session.incumbent
+  // Each rung of the ladder is half the hand movement of the one before, so the
+  // player can see how fine the current step has become.
+  const stepWidth = session.factors[session.level] ? `±${((session.factors[session.level] - 1) * 100).toFixed(1)}%` : null
 
   // The dial only carries the brackets this screen is working on: the current
   // comparison group, with the setting you are about to record marked.
@@ -160,7 +166,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         <div className="target-value" style={{ gridColumn: '1 / -1' }}>
           <span id="log-done">测试已完成</span>
           <strong className="num">{`${runs.length}`}<span style={{ fontSize: '0.4em', letterSpacing: '0.02em' }}> 轮</span></strong>
-          <p>所有成绩已保存到这台设备。可以查看结果，也可以撤销最后一轮再补一次。</p>
+          <p>可以查看结果，也可以撤销最后一轮再补一次。</p>
         </div>
         {saveError && <p className="notice" data-tone="error" role="alert">{saveError}</p>}
         <div className="action" style={{ gridColumn: '1 / -1' }}>
@@ -187,7 +193,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         <span className="run-badge">
           第 <b className="num">{runs.length + 1}</b> 轮
           <span className="phase" data-phase={plan.phase}>
-            {phaseLabel(plan, session.level)}
+            {phaseLabel(plan, session.level, session.mode)}
           </span>
         </span>
         <span
@@ -248,12 +254,19 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
           <p className="standing-rule">
             {plan.phase === 'confirm' ? (
               <>
-                复查阶段：和 <span className="num">{base.toFixed(3)}</span> 交错打四轮，两次对比都要领先、
+                复查阶段：和 <span className="num">{base.toFixed(3)}</span> 交错打{' '}
+                <span className="num">{CONFIRM_ROUNDS}</span> 轮，每一对都要领先、
                 平均多杀 <span className="num">{session.minGain}</span> 个以上，新档才会替换基准。
+              </>
+            ) : plan.phase === 'sweep' ? (
+              <>
+                粗扫阶段：把这一圈的数值各打一轮，先找出手感最接近的范围；
+                全部打完后，成绩最好的那一档会成为新起点。
               </>
             ) : (
               <>
-                基准 <span className="num">{base.toFixed(3)}</span>，新档要平均多杀{' '}
+                基准 <span className="num">{base.toFixed(3)}</span>，本档步宽{' '}
+                <span className="num">{stepWidth}</span>，新档要平均多杀{' '}
                 <span className="num">{session.minGain}</span> 个以上才算赢。
               </>
             )}
@@ -265,7 +278,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
           base={base}
           markers={markers}
           readout={current.toFixed(3)}
-          readoutCaption={`第 ${runs.length + 1} 轮 · ${phaseLabel(plan, session.level)}`}
+          readoutCaption={`第 ${runs.length + 1} 轮 · ${phaseLabel(plan, session.level, session.mode)}`}
           referenceTicks={
             plan.phase === 'confirm'
               ? [{ value: base, label: '原档' }, { value: plan.challenger ?? current, label: '挑战档' }]
@@ -309,7 +322,7 @@ export default function CalibrationScreen({ setup, id, initialSession, initialIn
         <div className="fold-body">
           <p>{plan.message}</p>
           <p>
-            当前基准为 <span className="num">{session.incumbent.toFixed(3)}</span>。新档位要在两次交错对比中
+            当前基准为 <span className="num">{session.incumbent.toFixed(3)}</span>。新档位要在每一对交错对比中
             都领先、平均多击杀 <span className="num">{session.minGain}</span> 个，才会替换基准。测试期间请
             保持 DPI、武器、站位与护甲一致。
           </p>

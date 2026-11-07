@@ -3,6 +3,7 @@ import SetupScreen from './components/SetupScreen.jsx'
 import CalibrationScreen from './components/CalibrationScreen.jsx'
 import ResultScreen from './components/ResultScreen.jsx'
 import MethodSection from './components/MethodSection.jsx'
+import { DialMark, CompassRing } from './components/marks.jsx'
 import { discardDraft, finishRun, loadData, restoreDraft } from './lib/storage.js'
 
 const STEPS = [
@@ -95,11 +96,7 @@ export default function App() {
   const brand = (
     <>
       <span className="wordmark-dial" aria-hidden="true">
-        <svg viewBox="0 0 20 20">
-          <circle className="bezel" cx="10" cy="10" r="8.4" />
-          <line className="pointer" x1="10" y1="10" x2="5.1" y2="5.4" />
-          <circle className="hub" cx="10" cy="10" r="1.7" />
-        </svg>
+        <DialMark />
       </span>
       AimDial
       <small>灵敏度校准</small>
@@ -108,6 +105,8 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* The bar is the chart's frame: the wordmark anchors the left margin, the
+          step scale is a graduated meter rather than a numbered list. */}
       <header className="bar">
         <div className="bar-inner">
           {step === 'setup' ? (
@@ -165,9 +164,9 @@ export default function App() {
 
       <footer className="foot">
         <div className="foot-inner">
+          <CompassRing className="foot-compass" ticks={48} bearing={0} label="" />
           <span>Made by <strong>Chouann</strong></span>
           <span className="spacer" />
-          <span>不读取、不修改游戏设置</span>
           <a href="https://github.com/HenMie/AimDial" target="_blank" rel="noreferrer">
             源码
           </a>

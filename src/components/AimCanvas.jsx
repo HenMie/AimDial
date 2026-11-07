@@ -403,7 +403,7 @@ export default function AimCanvas({ sensitivity, meta, round = 0, rounds = 0, on
           </button>
           {rawInput === false && (
             <p className="overlay-hint warn">
-              浏览器拒绝了原始输入，系统鼠标加速会介入，本轮手感仅供参考。
+              浏览器拒绝了原始输入，系统鼠标加速会介入。
             </p>
           )}
         </div>

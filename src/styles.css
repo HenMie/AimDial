@@ -1,31 +1,44 @@
-/* AimDial — instrument design system.
+/* AimDial — night-chart instrument.
  *
- * Ground is warm paper, ink is near-black, and exactly two colours carry
- * meaning: signal red for the number the player must act on, deep teal for a
- * state the search confirmed. Everything else is ink at reduced strength, so a
- * reader learns in one glance where to look.
+ * The ground is deep ink, the data is chalk, the construction lines are brass,
+ * and exactly two colours carry meaning: signal red for the number the player
+ * must act on and their own position, aiming teal for a state the search
+ * confirmed. Every panel is a plate bounded by a brass hairline with corner
+ * ticks — never a rounded card on paper.
  *
- * No webfonts: this page is opened on a phone next to a running game, so the
- * face has to be already on the machine. The numerals are the design, and every
- * system we name ships tabular figures.
+ * The scene is fixed: one person, alone at night, one monitor lit, playing a
+ * tactical shooter whose own interface is dark with bright data on top. The page
+ * matches that room instead of glowing cream-white into it.
+ *
+ * No webfonts: the page is opened on a phone beside a running game, so the face
+ * is already on the machine. Both stacks ship tabular figures.
  */
 
 :root {
-  --paper: #f3efe6;
-  --paper-top: #f7f4ec;
-  --paper-sunk: #ebe5d8;
-  --ink: #15130d;
-  --ink-2: #3d3830;
-  --ink-3: #6a6459;
-  --ink-4: #a29b8d;
-  --rule: #8a8575;
-  --rule-2: #a8a292;
-  --signal: #c8402a;
-  --signal-ink: #8e2a1a;
-  --signal-wash: #f6ded6;
-  --confirm: #0e6659;
-  --confirm-wash: #dcece7;
-  --focus: #135e8c;
+  --void: #080b11;
+  --ink-0: #0b0f16;
+  --ink-1: #10151e;
+  --ink-2: #161c27;
+  --ink-3: #1e2634;
+
+  /* Data reads as chalk on the ground, four strengths — the whole hierarchy. */
+  --chalk: #e9e5d9;
+  --chalk-2: #c3c0b6;
+  --chalk-3: #8d8f92;
+  --chalk-4: #5f6672;
+
+  /* Brass is construction, not decoration: rules, ticks, frames, micro-labels. */
+  --brass: #c9a961;
+  --brass-2: #8a7340;
+  --brass-dim: #4a4126;
+
+  --signal: #ff4655;
+  --signal-ink: #ff8b93;
+  --signal-wash: rgba(255, 70, 85, 0.14);
+  --confirm: #3fd0c9;
+  --confirm-ink: #8ff0ea;
+  --confirm-wash: rgba(63, 208, 201, 0.13);
+  --focus: #6fd3ff;
 
   --sans: 'Segoe UI Variable Display', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', system-ui, sans-serif;
@@ -42,7 +55,7 @@
   --measure: 68ch;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 *,
@@ -55,14 +68,20 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* The ground is a chart table seen at night: a faint coordinate grid, a warm
+   pool of light behind the instrument, and the ink going deeper at the edges so
+   the page sits inside the room instead of glowing out of it. */
 body {
   margin: 0;
   min-height: 100svh;
-  background:
-    repeating-linear-gradient(90deg, rgba(21, 19, 13, 0.035) 0 1px, transparent 1px 100%),
-    linear-gradient(180deg, var(--paper-top), var(--paper) 55%, #efeade);
-  background-size: 96px 100%, 100% 100%;
-  color: var(--ink);
+  background-color: var(--void);
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% -8%, rgba(201, 169, 97, 0.10), transparent 70%),
+    radial-gradient(ellipse 70% 45% at 50% 105%, rgba(255, 70, 85, 0.05), transparent 72%),
+    repeating-linear-gradient(90deg, rgba(201, 169, 97, 0.075) 0 1px, transparent 1px 88px),
+    repeating-linear-gradient(0deg, rgba(201, 169, 97, 0.055) 0 1px, transparent 1px 88px);
+  background-attachment: fixed;
+  color: var(--chalk);
   font: 400 var(--step-1) / 1.6 var(--sans);
   font-kerning: normal;
   font-variant-numeric: tabular-nums;
@@ -72,29 +91,29 @@ body {
 
 /* Browser surfaces carry the palette too: selection, caret, scrollbar, focus. */
 ::selection {
-  background: var(--ink);
-  color: var(--paper-top);
+  background: var(--signal);
+  color: #0b0f16;
 }
 
 /* The scroller is the root element, not <body>. */
 html {
   scrollbar-width: thin;
-  scrollbar-color: var(--rule-2) var(--paper);
+  scrollbar-color: var(--brass-2) var(--void);
 }
 
 html::-webkit-scrollbar {
   width: 12px;
 }
 html::-webkit-scrollbar-track {
-  background: var(--paper);
+  background: var(--void);
 }
 html::-webkit-scrollbar-thumb {
-  background: var(--rule-2);
-  border: 3px solid var(--paper);
+  background: var(--brass-2);
+  border: 3px solid var(--void);
   border-radius: 0;
 }
 html::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-3);
+  background: var(--chalk-3);
 }
 
 :focus-visible {
@@ -130,9 +149,9 @@ html::-webkit-scrollbar-thumb:hover {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(243, 239, 230, 0.94);
-  border-bottom: 1px solid var(--rule-2);
-  backdrop-filter: blur(6px);
+  background: rgba(8, 11, 17, 0.92);
+  border-bottom: 1px solid var(--brass-dim);
+  backdrop-filter: blur(10px) saturate(120%);
 }
 
 .bar-inner {
@@ -152,7 +171,7 @@ html::-webkit-scrollbar-thumb:hover {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: var(--chalk);
   font: 700 1.25rem/1 var(--sans);
   letter-spacing: -0.03em;
   cursor: default;
@@ -181,12 +200,12 @@ html::-webkit-scrollbar-thumb:hover {
 
 .wordmark-dial .bezel {
   fill: none;
-  stroke: var(--ink);
+  stroke: var(--chalk);
   stroke-width: 1.4;
 }
 
 .wordmark-dial .hub {
-  fill: var(--ink);
+  fill: var(--chalk);
 }
 
 .wordmark-dial .pointer {
@@ -199,7 +218,7 @@ html::-webkit-scrollbar-thumb:hover {
   font: 500 0.5625rem/1 var(--mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .steps {
@@ -211,7 +230,7 @@ html::-webkit-scrollbar-thumb:hover {
   font: 500 0.6875rem/1 var(--mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--chalk-4);
 }
 
 .steps li {
@@ -224,7 +243,7 @@ html::-webkit-scrollbar-thumb:hover {
 .steps b {
   font-weight: 500;
   font-size: 0.5625rem;
-  color: var(--ink-4);
+  color: var(--chalk-4);
 }
 
 .steps li[data-state='current'] {
@@ -236,11 +255,11 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .steps li[data-state='done'] {
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .steps li[data-state='done'] b {
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .save {
@@ -249,7 +268,7 @@ html::-webkit-scrollbar-thumb:hover {
   gap: 6px;
   font: 500 0.6875rem/1 var(--mono);
   letter-spacing: 0.08em;
-  color: var(--ink-3);
+  color: var(--chalk-3);
   white-space: nowrap;
 }
 
@@ -262,7 +281,7 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .save[data-state='pending']::before {
-  background: var(--ink-4);
+  background: var(--chalk-4);
 }
 
 .save[data-state='error']::before {
@@ -291,15 +310,33 @@ html::-webkit-scrollbar-thumb:hover {
 
 /* ---------- section marks ---------- */
 
+/* The section label. Its own bottom rule is the one divider that introduces a
+   group, so the list under it must NOT draw a second rule at its top: two hairlines
+   a few pixels apart read as a mistake and cut the page into unrelated strips.
+   Lists below a `.mark` therefore start rule-less; their rows are separated by the
+   row hairlines they already have. */
+/* The section plate header. One hairline introduces the group — never two: a
+   heading rule stacked against the list's own rule reads as a mistake and cuts
+   the page into unrelated strips. The mark owns the divider; whatever follows it
+   starts rule-less and its rows carry their own separators.
+   The brass dash before the title is the chart's own legend mark, not an eyebrow. */
 .mark {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 4px 12px;
-  margin: 0 0 18px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--ink);
+  margin: 0 0 20px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--brass-dim);
+}
+
+.mark + .history-list,
+.mark + .steps-list,
+.mark + .pros-list,
+.mark + .ledger,
+.mark + .ledger ol {
+  border-top: 0;
 }
 
 .mark-line {
@@ -317,7 +354,7 @@ html::-webkit-scrollbar-thumb:hover {
 
 .mark-note {
   font: 400 0.75rem/1.3 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 /* ---------- setup ---------- */
@@ -329,31 +366,174 @@ html::-webkit-scrollbar-thumb:hover {
   align-items: center;
 }
 
-/* Left column: the claim, then the three numbers it will actually test. */
+/* Left column: the chart's title block — a plotted field, a micro-kicker, and
+   the claim. More space above the heading than below it. */
 .setup-head {
   grid-column: 1;
   grid-row: 1;
+  position: relative;
   padding-top: 4px;
   min-width: 0;
 }
 
-/* No lede under it: the two fields beside it are the explanation. */
+/* The plotted field sits behind the whole title block as chart furniture, held
+   far under the type so it never competes with it: this is the grid the reading
+   is taken on, not an illustration of one. A mask fades it out of the text's
+   way at the left, where the words are. */
+.setup-plot {
+  position: absolute;
+  inset: -26px -20px -18px 34%;
+  pointer-events: none;
+  color: var(--brass);
+  opacity: 0.55;
+  mask-image: linear-gradient(105deg, transparent, #000 34%);
+  -webkit-mask-image: linear-gradient(105deg, transparent, #000 34%);
+}
+
+.setup-plot-lines {
+  width: 100%;
+  height: 100%;
+}
+
+/* The focus marker: a crosshair parked on the plotted field, red because it is
+   the point of aim — the one thing on this plate that is being measured. */
+.setup-plot-cross {
+  position: absolute;
+  right: 7%;
+  top: 26%;
+  width: 26px;
+  height: 26px;
+  color: var(--signal);
+  opacity: 0.9;
+}
+
+/* A kicker is banned as an eyebrow on a heading, but this one is a chart
+   legend: it names the instrument and its unit, and the heading follows it as
+   the title block of a figure. It carries its own rule so it reads as a caption
+   line on a plate, not as decoration above a hero. */
+.setup-kicker {
+  position: relative;
+  margin: 0 0 10px;
+  padding-left: 0;
+  font: 500 0.6875rem/1 var(--mono);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
 .setup-head h2 {
+  position: relative;
   margin: 0;
-  font: 600 clamp(1.6rem, 3.2vw, 2.125rem) / 1.16 var(--sans);
-  letter-spacing: -0.028em;
+  font: 650 clamp(1.75rem, 3.6vw, 2.375rem) / 1.14 var(--sans);
+  letter-spacing: -0.03em;
   text-wrap: balance;
+  color: var(--chalk);
+}
+
+/* The two ways to run the instrument. They sit under the heading across both
+   columns, because the choice changes what the run measures at all. */
+.mode-choice {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 0 0 clamp(8px, 1.6vw, 18px);
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}.mode-choice legend {
+  padding: 0 0 12px;
+  font: 500 0.8125rem / 1.2 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--chalk-3);
+}
+
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* A card is a radio in a box: whole surface clickable, focus stays visible. */
+.mode-card {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--brass-2);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.mode-card input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.mode-card strong {
+  font: 600 1rem / 1.3 var(--sans);
+  letter-spacing: -0.012em;
+  color: var(--chalk-2);
+}
+
+.mode-blurb {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--chalk-3);
+}
+
+.mode-budget {
+  margin-top: 2px;
+  font: 500 0.75rem / 1.3 var(--sans);
+  letter-spacing: 0.01em;
+  color: var(--chalk-4);
+}
+
+.mode-card[data-selected='true'] {
+  border-color: var(--signal);
+  background: linear-gradient(180deg, rgba(255, 70, 85, 0.10), rgba(255, 70, 85, 0.03));
+  box-shadow: inset 0 -2px 0 var(--signal);
+}
+
+.mode-card[data-selected='true'] strong {
+  color: var(--signal);
+}
+
+.mode-card[data-selected='true'] .mode-budget {
+  color: var(--chalk-3);
+}
+
+.mode-card:hover {
+  border-color: var(--chalk-3);
+}
+
+.mode-card:focus-within {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* The discovery note stands where the bracket preview would: same slot, prose
+   instead of three numbers. */
+.mode-note {
+  margin: clamp(24px, 4vw, 44px) 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--chalk);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--chalk-2);
+  max-width: 34em;
 }
 
 .preview-slot {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
   align-self: start;
 }
 
 .entry {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 3;
+  align-self: start;
 }
 
 /* The action lives in the entry column, under the field it submits. */
@@ -361,14 +541,72 @@ html::-webkit-scrollbar-thumb:hover {
   margin-top: 24px;
 }
 
-/* The preview is three readable numbers, not a scale: what this run tests,
-   largest first, with the setting you already use marked. */
+/* The bracket preview as a plate: a framed field on the chart with corner ticks
+   and a legend line, holding the three numbers the run will actually test. */
+.preview-frame {
+  position: relative;
+  margin: clamp(24px, 4vw, 44px) 0 0;
+  padding: 16px 20px 6px;
+  border: 1px solid var(--brass-dim);
+  background:
+    linear-gradient(180deg, rgba(201, 169, 97, 0.05), transparent 60%),
+    var(--ink-0);
+}
+
+/* Corner ticks, drawn in the brass: the frame reads as a plotted area, not a box. */
+.preview-frame::before,
+.preview-frame::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--brass);
+  pointer-events: none;
+}
+
+.preview-frame::before {
+  top: -1px;
+  left: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.preview-frame::after {
+  right: -1px;
+  bottom: -1px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--brass-dim);
+}
+
+.preview-glyph {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--brass);
+}
+
+.preview-label {
+  font: 500 0.6875rem/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+/* Three readable numbers, not a scale: what this run tests, largest first, with
+   the setting you already use marked. */
 .preview {
   display: grid;
-  margin: clamp(24px, 4vw, 44px) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--ink);
 }
 
 .preview li {
@@ -376,35 +614,39 @@ html::-webkit-scrollbar-thumb:hover {
   grid-template-columns: 1fr auto;
   align-items: baseline;
   gap: 4px 16px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--rule);
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(74, 65, 38, 0.55);
+}
+
+.preview li:last-child {
+  border-bottom: 0;
 }
 
 /* The first row carries the whole message, so it gets the mass. */
 .preview li:first-child {
-  padding-top: 18px;
-  padding-bottom: 18px;
+  padding-top: 14px;
+  padding-bottom: 15px;
 }
 
 .preview-value {
-  font: 600 clamp(1.75rem, 3.4vw, 2.25rem) / 1 var(--mono);
+  font: 600 clamp(1.6rem, 3.1vw, 2rem) / 1 var(--mono);
   letter-spacing: -0.03em;
-  color: var(--ink-2);
+  color: var(--chalk-3);
 }
 
 .preview li:first-child .preview-value {
-  font-size: clamp(2.25rem, 4.6vw, 3rem);
-  color: var(--ink);
+  font-size: clamp(2rem, 4.2vw, 2.625rem);
+  color: var(--chalk);
 }
 
 .preview li[data-current='true'] .preview-value {
-  color: var(--signal-ink);
+  color: var(--signal);
 }
 
 .preview-note {
   font-size: 0.8125rem;
   line-height: 1.3;
-  color: var(--ink-3);
+  color: var(--chalk-3);
   text-align: right;
 }
 
@@ -416,7 +658,7 @@ html::-webkit-scrollbar-thumb:hover {
 .preview-tick {
   display: block;
   width: 1.75rem;
-  height: 3px;
+  height: 2px;
   margin-top: 8px;
   background: var(--signal);
 }
@@ -425,12 +667,12 @@ html::-webkit-scrollbar-thumb:hover {
  * it prints the typical bracket at this DPI and drops the captions. */
 .preview[data-placeholder='true'] .preview-value,
 .preview[data-placeholder='true'] .preview-tick {
-  color: var(--ink-4);
+  color: var(--chalk-4);
   background: none;
 }
 
 .preview[data-placeholder='true'] li:first-child .preview-value {
-  color: var(--ink-4);
+  color: var(--chalk-4);
 }
 
 /* The entry column. Its first block is the whole task; DPI is support. */
@@ -438,7 +680,7 @@ html::-webkit-scrollbar-thumb:hover {
   display: grid;
   gap: clamp(26px, 4vw, 40px);
   padding-left: clamp(0px, 2.4vw, 40px);
-  border-left: 1px solid var(--rule);
+  border-left: 1px solid var(--brass-dim);
 }
 
 .entry > .field {
@@ -457,22 +699,50 @@ html::-webkit-scrollbar-thumb:hover {
   margin-bottom: 2px;
   font: 500 0.8125rem/1.3 var(--sans);
   letter-spacing: 0.02em;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
-/* The sensitivity field is the page's centre of gravity: oversized tabular
-   digits on a heavy rule, the same weight the dial's readout beside it carries. */
+/* The value being entered hangs on a graduated rule, like a reading on a scale
+   rather than a form field in a box. */
 .hero-input {
+  position: relative;
   display: flex;
   align-items: baseline;
-  min-height: 84px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid var(--ink);
+  min-height: 88px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--brass-2);
   transition: border-color 140ms linear;
+}
+
+/* The rule's own graduations, drawn at the bottom edge so the number sits on a
+   measured scale instead of floating over empty space. */
+.hero-input::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 5px;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--brass-2) 0 1px,
+    transparent 1px 11px
+  );
+  opacity: 0.5;
 }
 
 .hero-input:focus-within {
   border-bottom-color: var(--signal);
+}
+
+.hero-input:focus-within::after {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--signal) 0 1px,
+    transparent 1px 11px
+  );
+  opacity: 0.8;
 }
 
 .hero-input input {
@@ -481,7 +751,7 @@ html::-webkit-scrollbar-thumb:hover {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: var(--chalk);
   font: 600 clamp(2.75rem, 6.4vw, 4rem) / 1 var(--mono);
   letter-spacing: -0.035em;
   caret-color: var(--signal);
@@ -500,7 +770,7 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .hero-input input::placeholder {
-  color: var(--rule-2);
+  color: var(--brass-2);
   font-weight: 400;
 }
 
@@ -516,23 +786,27 @@ html::-webkit-scrollbar-thumb:hover {
 
 .field-minor .field-label {
   font-size: 0.6875rem;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .field-minor .input-shell input {
   font-size: 1.375rem;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 /* ---------- dial ---------- */
 
+/* The dial is an astrolabe face: a lit instrument sunk into the chart's ground,
+   its scale in brass, its marks in data white, its needle in signal red. */
 .dial {
   --pad: 26px;
   position: relative;
   padding: 20px 0 0;
-  border: 1px solid var(--ink);
-  background: linear-gradient(180deg, #f8f5ee, #ece6d8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--brass-2);
+  background:
+    radial-gradient(ellipse 70% 90% at 50% 0%, rgba(201, 169, 97, 0.11), transparent 70%),
+    linear-gradient(180deg, var(--ink-1), var(--void));
+  box-shadow: inset 0 1px 0 rgba(201, 169, 97, 0.18);
 }
 
 /* The frame sits inside the caliper tabs, so nothing on the scale can be
@@ -548,8 +822,8 @@ html::-webkit-scrollbar-thumb:hover {
   top: -1px;
   bottom: -1px;
   width: 6px;
-  border: 1px solid var(--ink);
-  background: var(--paper);
+  border: 1px solid var(--brass-2);
+  background: var(--void);
 }
 
 .dial::before {
@@ -581,7 +855,7 @@ html::-webkit-scrollbar-thumb:hover {
   flex: 1 1 10rem;
   font: 400 0.75rem/1.45 var(--mono);
   letter-spacing: 0.01em;
-  color: var(--ink-3);
+  color: var(--chalk-3);
   max-width: 26ch;
 }
 
@@ -599,49 +873,49 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .dial-rail {
-  stroke: var(--ink);
+  stroke: var(--chalk);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .dial-tick {
-  stroke: var(--ink-3);
+  stroke: var(--chalk-3);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .dial-tick.is-major {
-  stroke: var(--ink);
+  stroke: var(--chalk);
   stroke-width: 1.4;
 }
 
 .dial-ghost {
-  stroke: var(--ink-3);
+  stroke: var(--chalk-3);
   stroke-width: 1;
   stroke-dasharray: 3 4;
   vector-effect: non-scaling-stroke;
 }
 
 .dial-marker .dial-needle {
-  stroke: var(--ink);
+  stroke: var(--chalk);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .dial-marker .dial-cap {
-  fill: var(--paper);
-  stroke: var(--ink);
+  fill: var(--void);
+  stroke: var(--chalk);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .dial-marker[data-kind='base'] .dial-needle {
-  stroke: var(--ink);
+  stroke: var(--chalk);
   stroke-width: 2;
 }
 
 .dial-marker[data-kind='base'] .dial-cap {
-  fill: var(--ink);
+  fill: var(--chalk);
 }
 
 .dial-marker[data-kind='active'] .dial-needle {
@@ -675,7 +949,7 @@ html::-webkit-scrollbar-thumb:hover {
   transform: translateX(-50%);
   font-size: 0.6875rem;
   letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .dial-tick-label[data-edge='start'] {
@@ -719,7 +993,7 @@ html::-webkit-scrollbar-thumb:hover {
 .dial-mark-value {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--chalk);
   white-space: nowrap;
 }
 
@@ -730,7 +1004,7 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .dial-mark[data-kind='confirm'] .dial-mark-value {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 700;
   text-decoration: underline;
   text-decoration-color: var(--confirm);
@@ -742,13 +1016,13 @@ html::-webkit-scrollbar-thumb:hover {
   font-size: 0.625rem;
   font-weight: 500;
   vertical-align: super;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .dial-mark-label {
   font-size: 0.625rem;
   letter-spacing: 0.06em;
-  color: var(--ink-3);
+  color: var(--chalk-3);
   white-space: nowrap;
 }
 
@@ -757,13 +1031,13 @@ html::-webkit-scrollbar-thumb:hover {
   gap: 18px;
   margin: 0;
   padding: 10px 0 14px;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
   font-size: 0.75rem;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .dial-reference .num {
-  color: var(--ink-2);
+  color: var(--chalk-2);
   font-weight: 600;
 }
 
@@ -773,7 +1047,7 @@ html::-webkit-scrollbar-thumb:hover {
   display: grid;
   gap: 22px;
   padding-left: clamp(0px, 2vw, 26px);
-  border-left: 1px solid var(--rule);
+  border-left: 1px solid var(--brass-dim);
 }
 
 .field {
@@ -792,7 +1066,7 @@ html::-webkit-scrollbar-thumb:hover {
   font: 500 0.75rem/1 var(--mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--chalk-2);
   padding: 0;
 }
 
@@ -801,7 +1075,7 @@ html::-webkit-scrollbar-thumb:hover {
   font-style: normal;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .input-shell {
@@ -809,7 +1083,7 @@ html::-webkit-scrollbar-thumb:hover {
   align-items: baseline;
   gap: 6px;
   padding: 2px 0 4px;
-  border-bottom: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--chalk);
   transition: border-color 140ms linear;
 }
 
@@ -823,7 +1097,7 @@ html::-webkit-scrollbar-thumb:hover {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: var(--chalk);
   font: 600 clamp(1.5rem, 3.6vw, 1.875rem) / 1.15 var(--mono);
   letter-spacing: -0.03em;
   caret-color: var(--signal);
@@ -842,16 +1116,16 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .input-shell input::placeholder {
-  color: var(--ink-4);
+  color: var(--chalk-4);
   font-weight: 400;
 }
 
 .input-shell.output {
-  border-bottom-color: var(--rule-2);
+  border-bottom-color: var(--brass-2);
 }
 
 .input-shell.output input {
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .input-shell.output input:read-only {
@@ -861,7 +1135,7 @@ html::-webkit-scrollbar-thumb:hover {
 .input-shell > span {
   flex-shrink: 0;
   font: 400 0.75rem/1 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 /* Presets are a ruler, not a toggle row: they sit on a tick line under the
@@ -871,7 +1145,7 @@ html::-webkit-scrollbar-thumb:hover {
   gap: 0;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
   list-style: none;
 }
 
@@ -890,11 +1164,11 @@ html::-webkit-scrollbar-thumb:hover {
   left: 0;
   width: 1px;
   height: 5px;
-  background: var(--rule-2);
+  background: var(--brass-2);
 }
 
 .ticks li:first-child::before {
-  background: var(--ink-3);
+  background: var(--chalk-3);
 }
 
 .ticks button {
@@ -903,7 +1177,7 @@ html::-webkit-scrollbar-thumb:hover {
   border: 0;
   border-radius: 2px;
   background: none;
-  color: var(--ink-3);
+  color: var(--chalk-3);
   font: 500 0.8125rem/1.2 var(--mono);
   letter-spacing: -0.01em;
   cursor: pointer;
@@ -911,12 +1185,12 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 .ticks button:hover {
-  color: var(--ink);
-  background: var(--paper-sunk);
+  color: var(--chalk);
+  background: var(--ink-3);
 }
 
 .ticks button[aria-pressed='true'] {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 700;
   box-shadow: inset 0 -2px 0 var(--signal);
 }
@@ -926,11 +1200,11 @@ html::-webkit-scrollbar-thumb:hover {
   gap: 4px;
   margin: 0;
   padding: 12px 0;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
+  border-bottom: 1px solid var(--brass-dim);
   font-size: 0.8125rem;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .derived strong {
@@ -953,6 +1227,8 @@ html::-webkit-scrollbar-thumb:hover {
   flex: 1 1 12rem;
 }
 
+/* The action plate: squared, with a hard offset shadow that reads as a physical
+   key on the instrument rather than a soft app button. */
 button.primary,
 a.primary {
   display: flex;
@@ -960,33 +1236,33 @@ a.primary {
   justify-content: center;
   gap: 10px;
   min-height: 56px;
-  padding: 0 22px;
-  border: 1px solid var(--signal-ink);
-  border-radius: 2px;
+  padding: 0 24px;
+  border: 1px solid var(--signal);
+  border-radius: 0;
   background: var(--signal);
-  color: #fff8f4;
-  font: 600 1rem/1 var(--sans);
-  letter-spacing: 0.01em;
+  color: #12070a;
+  font: 650 1rem/1 var(--sans);
+  letter-spacing: 0.02em;
   cursor: pointer;
   transition: background-color 140ms linear, transform 90ms linear, box-shadow 140ms linear;
-  box-shadow: 0 2px 0 var(--signal-ink);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 70, 85, 0.25);
 }
 
 button.primary:hover,
 a.primary:hover {
-  background: #b5371f;
+  background: #ff6170;
 }
 
 button.primary:active,
 a.primary:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 var(--signal-ink);
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
 }
 
 button.primary:disabled {
-  background: #cdbfb6;
-  border-color: #b3a49a;
-  color: #6d625a;
+  background: var(--ink-3);
+  border-color: var(--brass-dim);
+  color: var(--chalk-4);
   box-shadow: none;
   cursor: default;
 }
@@ -999,23 +1275,23 @@ button.quiet {
   padding: 0 2px;
   border: 0;
   background: none;
-  color: var(--ink-2);
+  color: var(--chalk-2);
   font: 500 0.875rem/1 var(--sans);
   cursor: pointer;
-  border-bottom: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--brass-dim);
   transition: color 120ms linear, border-color 120ms linear;
 }
 
 button.quiet:hover {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
+  color: var(--chalk);
+  border-bottom-color: var(--chalk);
 }
 
 /* Disabled still has to be findable: the only escape from the run screen lives
  * here, so it drops to ink-3, not to the barely-there ink-4. */
 button.quiet:disabled {
-  color: var(--ink-3);
-  border-bottom-color: var(--rule-2);
+  color: var(--chalk-3);
+  border-bottom-color: var(--brass-2);
   cursor: not-allowed;
 }
 
@@ -1028,7 +1304,7 @@ button.back {
   padding: 0 4px;
   border: 0;
   background: none;
-  color: var(--ink-2);
+  color: var(--chalk-2);
   font: 500 0.875rem/1 var(--sans);
   cursor: pointer;
 }
@@ -1053,8 +1329,8 @@ button.back svg {
   border-left: 0;
   font-size: 0.875rem;
   line-height: 1.55;
-  color: var(--ink-2);
-  background: linear-gradient(90deg, var(--paper-sunk), transparent 70%);
+  color: var(--chalk-2);
+  background: linear-gradient(90deg, var(--chalk-3), transparent 70%);
 }
 
 .notice::before {
@@ -1089,7 +1365,7 @@ button.back svg {
   gap: 10px 24px;
   margin: 0 0 clamp(24px, 4vw, 40px);
   padding: 16px 18px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--chalk);
   background: repeating-linear-gradient(
     -45deg,
     rgba(200, 64, 42, 0.06) 0 8px,
@@ -1106,7 +1382,7 @@ button.back svg {
   margin: 3px 0 0;
   font-size: 0.875rem;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .resume h2 {
@@ -1136,7 +1412,7 @@ button.back svg {
   padding-top: 2px;
   border-top: 1px solid rgba(21, 19, 13, 0.12);
   font-size: 0.8125rem;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 /* ---------- calibrate ---------- */
@@ -1194,7 +1470,7 @@ button.back svg {
   grid-column: 1 / -1;
   margin-top: 6px;
   padding-top: 14px;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
 }
 
 .end-run .quiet {
@@ -1207,11 +1483,11 @@ button.back svg {
   max-width: 38ch;
   font-size: 0.8125rem;
   line-height: 1.6;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .standing-rule .num {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 600;
 }
 
@@ -1223,7 +1499,7 @@ button.back svg {
   align-items: baseline;
   gap: 10px 20px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--ink);
+  border-bottom: 1px solid var(--chalk);
 }
 
 .run-badge {
@@ -1232,11 +1508,11 @@ button.back svg {
   gap: 8px;
   font: 500 0.75rem/1 var(--mono);
   letter-spacing: 0.06em;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .run-badge b {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 600;
 }
 
@@ -1251,8 +1527,8 @@ button.back svg {
 }
 
 .run-badge .phase[data-phase='screen'] {
-  border-color: var(--rule-2);
-  color: var(--ink-3);
+  border-color: var(--brass-2);
+  color: var(--chalk-3);
 }
 
 .run-progress {
@@ -1267,11 +1543,11 @@ button.back svg {
 .run-progress i {
   flex: 1 1 0;
   height: 3px;
-  background: var(--rule);
+  background: var(--brass-dim);
 }
 
 .run-progress i[data-done='true'] {
-  background: var(--ink);
+  background: var(--chalk);
 }
 
 .run-progress i[data-now='true'] {
@@ -1288,7 +1564,7 @@ button.back svg {
   font: 500 0.6875rem/1 var(--mono);
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .target-value strong {
@@ -1314,12 +1590,12 @@ button.back svg {
   margin: 0;
   font-size: 0.875rem;
   line-height: 1.55;
-  color: var(--ink-2);
+  color: var(--chalk-2);
   max-width: 34ch;
 }
 
 .target-value p .num {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 600;
 }
 
@@ -1328,14 +1604,14 @@ button.back svg {
   display: grid;
   gap: 6px;
   padding: 12px 0;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
+  border-bottom: 1px solid var(--brass-dim);
   font-size: 0.8125rem;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .receipt strong {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 600;
 }
 
@@ -1355,13 +1631,13 @@ button.back svg {
   align-items: baseline;
   gap: 10px;
   padding-bottom: 6px;
-  border-bottom: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--chalk);
 }
 
 .pad-display output {
   font: 600 2.25rem/1 var(--mono);
   letter-spacing: -0.04em;
-  color: var(--ink);
+  color: var(--chalk);
   min-height: 2.25rem;
   min-width: 2ch;
   border-radius: 2px;
@@ -1373,13 +1649,13 @@ button.back svg {
 }
 
 .pad-display output[data-empty='true'] {
-  color: var(--ink-4);
+  color: var(--chalk-4);
   font-weight: 400;
 }
 
 .pad-display span {
   font: 400 0.75rem/1 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
   margin-left: auto;
 }
 
@@ -1391,18 +1667,19 @@ button.back svg {
 
 .pad-keys button {
   min-height: 56px;
-  border: 1px solid var(--rule-2);
-  border-radius: 2px;
-  background: var(--paper-top);
-  color: var(--ink);
+  border: 1px solid var(--brass-dim);
+  border-radius: 0;
+  background: var(--ink-1);
+  color: var(--chalk);
   font: 500 1.25rem/1 var(--mono);
   cursor: pointer;
   transition: background-color 100ms linear, border-color 100ms linear, transform 80ms linear;
 }
 
 .pad-keys button:hover {
-  background: var(--paper-sunk);
-  border-color: var(--ink-3);
+  background: var(--ink-3);
+  border-color: var(--brass-2);
+  color: var(--chalk);
 }
 
 .pad-keys button:active {
@@ -1411,14 +1688,14 @@ button.back svg {
 
 .pad-keys button[data-role='clear'] {
   font: 500 0.8125rem/1 var(--sans);
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .pad-note {
   margin: 0;
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 /* ---------- ledger ---------- */
@@ -1432,7 +1709,7 @@ button.back svg {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
 }
 
 .ledger li {
@@ -1441,7 +1718,7 @@ button.back svg {
   align-items: center;
   gap: 12px;
   padding: 7px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--brass-dim);
   font-size: 0.8125rem;
   animation: row-in 300ms var(--ease) both;
 }
@@ -1459,19 +1736,19 @@ button.back svg {
 
 .ledger .n {
   font: 500 0.6875rem/1 var(--mono);
-  color: var(--ink-4);
+  color: var(--chalk-4);
 }
 
 .ledger .s {
   font: 600 0.875rem/1 var(--mono);
-  color: var(--ink);
+  color: var(--chalk);
   letter-spacing: -0.02em;
 }
 
 .ledger .k {
   font: 600 0.875rem/1 var(--mono);
   text-align: right;
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 .ledger li[data-latest='true'] .s,
@@ -1484,9 +1761,9 @@ button.back svg {
   position: relative;
   height: 6px;
   overflow: hidden;
-  background: repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px 10%);
-  border-left: 1px solid var(--rule-2);
-  border-right: 1px solid var(--rule-2);
+  background: repeating-linear-gradient(90deg, var(--brass-dim) 0 1px, transparent 1px 10%);
+  border-left: 1px solid var(--brass-2);
+  border-right: 1px solid var(--brass-2);
 }
 
 .killbar-fill {
@@ -1494,7 +1771,7 @@ button.back svg {
   inset: 0 auto 0 0;
   width: var(--fill, 0%);
   max-width: 100%;
-  background: var(--ink);
+  background: var(--chalk);
   opacity: 0.82;
   transition: width 340ms var(--ease);
 }
@@ -1514,7 +1791,7 @@ button.back svg {
 .fold {
   grid-column: 1 / -1;
   margin-top: 22px;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
 }
 
 .fold + .fold {
@@ -1529,7 +1806,7 @@ button.back svg {
   cursor: pointer;
   list-style: none;
   font: 500 0.875rem/1.3 var(--sans);
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .fold > summary::-webkit-details-marker {
@@ -1540,7 +1817,7 @@ button.back svg {
   content: '+';
   margin-left: auto;
   font: 400 1.125rem/1 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
   transition: transform 160ms var(--ease);
 }
 
@@ -1549,20 +1826,20 @@ button.back svg {
 }
 
 .fold > summary:hover {
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 .fold > summary .meta {
   font: 400 0.6875rem/1 var(--mono);
   letter-spacing: 0.06em;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .fold-body {
   padding: 2px 0 20px;
   font-size: 0.875rem;
   line-height: 1.65;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .fold-body p {
@@ -1576,12 +1853,12 @@ button.back svg {
 
 .fold-body strong {
   font-weight: 600;
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 .fold-body .num {
   font-weight: 600;
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 /* ---------- result ---------- */
@@ -1606,7 +1883,7 @@ button.back svg {
   font: 500 0.6875rem/1 var(--mono);
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 .verdict-value strong {
@@ -1623,12 +1900,12 @@ button.back svg {
   margin: 4px 0 0;
   font-size: 1rem;
   line-height: 1.55;
-  color: var(--ink-2);
+  color: var(--chalk-2);
   max-width: 36ch;
 }
 
 .verdict-value p .num {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 600;
 }
 
@@ -1642,7 +1919,7 @@ button.back svg {
 .readings {
   display: grid;
   gap: 0;
-  border-top: 1px solid var(--ink);
+  border-top: 1px solid var(--chalk);
 }
 
 .reading {
@@ -1651,20 +1928,20 @@ button.back svg {
   align-items: baseline;
   gap: 2px 14px;
   padding: 13px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--brass-dim);
 }
 
 .reading-label {
   font: 500 0.6875rem/1.4 var(--mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .reading-value {
   font: 600 1.375rem/1 var(--mono);
   letter-spacing: -0.03em;
-  color: var(--ink);
+  color: var(--chalk);
   justify-self: end;
 }
 
@@ -1672,14 +1949,14 @@ button.back svg {
   margin-left: 3px;
   font-size: 0.75rem;
   font-weight: 400;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .reading-note {
   grid-column: 1 / -1;
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .tone-confirm .reading-value {
@@ -1688,6 +1965,228 @@ button.back svg {
 
 .tone-signal .reading-value {
   color: var(--signal);
+}
+
+/* ---------- pro reference ---------- */
+
+.pros {
+  margin-top: clamp(36px, 6vw, 60px);
+}
+
+/* The header is sticky (52px tall at the default size), so anything scrolled to
+   must stop clear of it or the heading ends up underneath the bar. */
+.pros,
+.pros .mark {
+  scroll-margin-top: 76px;
+}
+
+.pros-lede {
+  margin: 14px 0 0;
+  max-width: 46em;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--chalk-2);
+  text-wrap: pretty;
+}
+
+.pros-lede strong {
+  font-weight: 600;
+  color: var(--chalk);
+}
+
+/* The band is the population's own p10-p90 on a log scale: the same axis the
+   search uses, because sensitivity is multiplicative. */
+.pros-band {
+  margin-top: clamp(22px, 3.6vw, 34px);
+}
+
+.pros-track {
+  position: relative;
+  height: 8px;
+  background: var(--ink-1);
+  border: 1px solid var(--brass-dim);
+}
+
+.pros-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--brass-dim) 0 1px,
+    transparent 1px 9px
+  );
+}
+
+/* The player's own result: the only red mark on the band. */
+.pros-you {
+  position: absolute;
+  top: -7px;
+  width: 2px;
+  height: 20px;
+  margin-left: -1px;
+  background: var(--signal);
+}
+
+.pros-you::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  background: var(--signal);
+}
+
+/* An outlier still has to be visible, so it parks against the end it exceeds. */
+.pros-you[data-outside='true'] {
+  opacity: 0.55;
+}
+
+.pros-scale {
+  position: relative;
+  height: 18px;
+  margin-top: 8px;
+  font: 500 0.6875rem/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--chalk-3);
+}
+
+.pros-scale span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.pros-scale span:first-child {
+  transform: none;
+}
+
+.pros-scale .is-end {
+  transform: translateX(-100%);
+}
+
+.pros-scale .is-mid {
+  color: var(--chalk-2);
+}
+
+.pros-caption {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--chalk-4);
+}
+
+.pros-list {
+  margin: clamp(22px, 3.4vw, 30px) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--brass-dim);
+}
+
+.pros-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: baseline;
+  gap: 6px 18px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--brass-dim);
+  font-size: 0.8125rem;
+}
+
+.pros-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pros-name strong {
+  font-weight: 600;
+  color: var(--chalk);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pros-team {
+  font-size: 0.75rem;
+  color: var(--chalk-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pros-setting {
+  font-variant-numeric: tabular-nums;
+  color: var(--chalk-2);
+  white-space: nowrap;
+}
+
+.pros-edpi {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--chalk);
+  white-space: nowrap;
+}
+
+.pros-edpi small {
+  font-weight: 400;
+  font-size: 0.6875rem;
+  color: var(--chalk-4);
+}
+
+.pros-delta {
+  min-width: 4.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--chalk-3);
+  white-space: nowrap;
+}
+
+.pros-empty {
+  margin: clamp(20px, 3vw, 28px) 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--brass-dim);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--chalk-3);
+}
+
+.pros-foot {
+  margin: clamp(18px, 2.6vw, 24px) 0 0;
+  max-width: 52em;
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: var(--chalk-4);
+}
+
+.pros-foot a {
+  color: var(--chalk-3);
+  text-decoration-color: var(--brass-2);
+  text-underline-offset: 2px;
+}
+
+.pros-foot a:hover {
+  color: var(--signal-ink);
+}
+
+@media (max-width: 640px) {
+  .pros-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+  }
+
+  .pros-setting {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 0.75rem;
+  }
+
+  .pros-delta {
+    grid-column: 2;
+    grid-row: 2;
+  }
 }
 
 /* ---------- bracket table ---------- */
@@ -1700,11 +2199,11 @@ button.back svg {
 
 .brackets th {
   padding: 0 0 8px;
-  border-bottom: 1px solid var(--ink);
+  border-bottom: 1px solid var(--chalk);
   font: 500 0.625rem/1 var(--mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--chalk-3);
   text-align: left;
 }
 
@@ -1715,14 +2214,14 @@ button.back svg {
 
 .brackets td {
   padding: 11px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--brass-dim);
   vertical-align: middle;
 }
 
 .brackets .bv {
   font: 600 1rem/1 var(--mono);
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 .brackets tr[data-selected='true'] .bv {
@@ -1737,18 +2236,18 @@ button.back svg {
   display: block;
   margin-top: 3px;
   font: 400 0.6875rem/1.35 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
   letter-spacing: 0;
 }
 
 .brackets .score {
   font: 600 0.875rem/1 var(--mono);
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 .brackets .score small {
   font-weight: 400;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .tag {
@@ -1768,7 +2267,7 @@ button.back svg {
 }
 
 .tag[data-tone='muted'] {
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .decisions {
@@ -1781,7 +2280,7 @@ button.back svg {
   display: grid;
   gap: 4px;
   padding: 11px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--brass-dim);
 }
 
 .decisions h3 {
@@ -1790,18 +2289,18 @@ button.back svg {
   gap: 8px;
   margin: 0;
   font: 600 0.8125rem/1.4 var(--sans);
-  color: var(--ink);
+  color: var(--chalk);
 }
 
 .decisions p {
   margin: 0;
   font-size: 0.75rem;
   line-height: 1.6;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .decisions .num {
-  color: var(--ink-2);
+  color: var(--chalk-2);
   font-weight: 600;
 }
 
@@ -1812,11 +2311,11 @@ button.back svg {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--ink);
+  border-top: 1px solid var(--chalk);
 }
 
 .history-list li {
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--brass-dim);
 }
 
 .history-entry {
@@ -1829,14 +2328,14 @@ button.back svg {
   padding: 12px 4px 12px 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: var(--chalk);
   text-align: left;
   cursor: pointer;
   transition: background-color 120ms linear;
 }
 
 .history-entry:hover {
-  background: linear-gradient(90deg, var(--paper-sunk), transparent 80%);
+  background: linear-gradient(90deg, var(--chalk-3), transparent 80%);
 }
 
 .history-entry strong {
@@ -1846,32 +2345,32 @@ button.back svg {
 
 .history-entry .when {
   font: 400 0.75rem/1.4 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .history-entry .score {
   font: 600 0.875rem/1 var(--mono);
-  color: var(--ink-2);
+  color: var(--chalk-2);
   white-space: nowrap;
 }
 
 .history-entry .score small {
   font-weight: 400;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .history-entry .arrow {
   font: 400 0.875rem/1 var(--mono);
-  color: var(--ink-4);
+  color: var(--chalk-4);
 }
 
 .empty {
   margin: 0;
   padding: 18px 0;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
+  border-bottom: 1px solid var(--brass-dim);
   font-size: 0.875rem;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 /* ---------- method ---------- */
@@ -1886,7 +2385,7 @@ button.back svg {
   padding: 0;
   list-style: none;
   counter-reset: method;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--brass-dim);
 }
 
 .steps-list > li {
@@ -1894,7 +2393,7 @@ button.back svg {
   grid-template-columns: 3.25rem minmax(0, 1fr);
   gap: 0 16px;
   padding: 18px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--brass-dim);
   counter-increment: method;
 }
 
@@ -1915,26 +2414,26 @@ button.back svg {
   margin: 0;
   font-size: 0.9375rem;
   line-height: 1.65;
-  color: var(--ink-2);
+  color: var(--chalk-2);
   max-width: var(--measure);
 }
 
 .step-body .num {
-  color: var(--ink);
+  color: var(--chalk);
   font-weight: 600;
 }
 
 .step-figure {
   margin-top: 14px;
   padding: 14px 16px 12px;
-  background: var(--paper-top);
-  border: 1px solid var(--rule);
+  background: var(--ink-1);
+  border: 1px solid var(--brass-dim);
 }
 
 .step-figure figcaption {
   margin-top: 8px;
   font: 400 0.6875rem/1.5 var(--mono);
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .step-figure svg {
@@ -1946,23 +2445,23 @@ button.back svg {
 
 /* the four sketches share one vocabulary: ink rail, red measure, teal result */
 .fig-rail {
-  stroke: var(--ink-3);
+  stroke: var(--chalk-3);
   stroke-width: 1;
 }
 
 .fig-rail-strong {
-  stroke: var(--ink);
+  stroke: var(--chalk);
   stroke-width: 1.4;
 }
 
 .fig-tick {
-  stroke: var(--ink-3);
+  stroke: var(--chalk-3);
   stroke-width: 1;
 }
 
 .fig-dot {
-  fill: var(--paper-top);
-  stroke: var(--ink);
+  fill: var(--chalk-2);
+  stroke: var(--chalk);
   stroke-width: 1.4;
 }
 
@@ -1972,11 +2471,11 @@ button.back svg {
 }
 
 .fig-dot.is-ink {
-  fill: var(--ink);
+  fill: var(--chalk);
 }
 
 .fig-label {
-  fill: var(--ink-2);
+  fill: var(--chalk-2);
   font: 500 10px var(--mono);
 }
 
@@ -1985,7 +2484,7 @@ button.back svg {
 }
 
 .fig-label.is-muted {
-  fill: var(--ink-3);
+  fill: var(--chalk-3);
 }
 
 .fig-bracket {
@@ -2001,7 +2500,7 @@ button.back svg {
 }
 
 .fig-bar {
-  fill: var(--ink);
+  fill: var(--chalk);
   opacity: 0.86;
 }
 
@@ -2011,7 +2510,7 @@ button.back svg {
 }
 
 .fig-bar.is-muted {
-  fill: var(--ink-4);
+  fill: var(--chalk-4);
   opacity: 1;
 }
 
@@ -2019,19 +2518,29 @@ button.back svg {
 
 .foot {
   margin-top: auto;
-  border-top: 1px solid var(--rule-2);
+  border-top: 1px solid var(--brass-dim);
+}
+
+/* An SVG with no intrinsic size fills whatever box it is given, so every mark
+   that appears inline declares its own dimensions. */
+.foot-compass {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  align-self: center;
+  color: var(--brass-2);
 }
 
 .foot-inner {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 6px 18px;
   width: min(1120px, 100%);
   margin: 0 auto;
   padding: 16px var(--gutter) 22px;
   font-size: 0.75rem;
-  color: var(--ink-3);
+  color: var(--chalk-3);
 }
 
 .foot-inner .spacer {
@@ -2039,20 +2548,20 @@ button.back svg {
 }
 
 .foot-inner a {
-  color: var(--ink-2);
+  color: var(--chalk-2);
   text-decoration: none;
-  border-bottom: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--brass-dim);
   transition: color 120ms linear, border-color 120ms linear;
 }
 
 .foot-inner a:hover {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
+  color: var(--chalk);
+  border-bottom-color: var(--chalk);
 }
 
 .foot-inner strong {
   font-weight: 600;
-  color: var(--ink-2);
+  color: var(--chalk-2);
 }
 
 /* ---------- responsive ---------- */
@@ -2076,9 +2585,9 @@ button.back svg {
     display: contents;
   }
 
-  /* Phone: heading → field → the three settings → action. The preview is its
-   * own grid item, so it slots between the field and the button instead of
-   * landing after it. */
+  /* Phone: heading → mode choice → field → the three settings → action. Every
+   * block is placed by hand because .setup-head and .entry are display:contents
+   * here; a block without a row lands on top of its neighbour. */
   .setup-head {
     display: contents;
   }
@@ -2088,30 +2597,47 @@ button.back svg {
     grid-row: 1;
   }
 
+  /* The plotted field is desktop furniture: on a phone it would sit under the
+     mode cards, so it goes. The kicker stays as the title block's caption. */
+  .setup-plot {
+    display: none;
+  }
+
+  .setup-kicker {
+    grid-column: 1;
+    grid-row: 2;
+    margin-bottom: 4px;
+  }
+
+  .mode-choice {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
   .entry {
     display: contents;
   }
 
   .entry > .focus-block {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 4;
   }
 
   .preview-slot {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 5;
     margin-top: 24px;
   }
 
   .entry > .hero-cta {
     grid-column: 1;
-    grid-row: 4;
+    grid-row: 6;
     margin-top: 22px;
   }
 
   .entry > .field-minor {
     grid-column: 1;
-    grid-row: 5;
+    grid-row: 7;
     margin-top: 26px;
   }
 
@@ -2152,7 +2678,7 @@ button.back svg {
   .entry {
     padding-left: 0;
     border-left: 0;
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid var(--brass-dim);
     padding-top: 24px;
   }
 
@@ -2272,7 +2798,7 @@ button.back svg {
 
   /* Touch first: the keypad is the interaction, so drop the pointer hint and
    * give the extra line back to the scale. */
-  .pad > .pad-note:first-of-type {
+  .pad > .pad-note {
     display: none;
   }
 
@@ -2287,10 +2813,6 @@ button.back svg {
 
   .pad .primary {
     min-height: 52px;
-  }
-
-  .pad-note {
-    font-size: 0.6875rem;
   }
 
   .run .fold > summary {
@@ -2414,4 +2936,27 @@ button.back svg {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- authored marks ----------
+ * Every mark in marks.jsx is a bare viewBox SVG with no intrinsic size, so the
+ * size has to come from its class. These defaults keep any one of them from
+ * filling its parent; specific contexts override them. */
+
+.setup-plot-lines,
+.preview-glyph,
+.foot-compass,
+.step-figure svg {
+  display: block;
+}
+
+.setup-plot-lines {
+  width: 100%;
+  height: 100%;
+}
+
+.setup-plot-cross,
+.preview-glyph,
+.foot-compass {
+  flex: none;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CONFIRM_ROUNDS } from '../lib/rangeCalibration.js'
 
 // Each step draws a different sketch so the four cards read as a sequence
 // rather than four copies of one diagram. `path` is drawn left-to-right with
@@ -11,9 +12,9 @@ const DIAGRAMS = {
       { kind: 'dot', x: 20, y: 30, r: 5, base: false },
       { kind: 'dot', x: 100, y: 30, r: 8, base: true },
       { kind: 'dot', x: 180, y: 30, r: 5, base: false },
-      { kind: 'text', x: 20, y: 56, text: '×0.8', base: false },
+      { kind: 'text', x: 20, y: 56, text: '低一档', base: false },
       { kind: 'text', x: 100, y: 56, text: '当前', base: true },
-      { kind: 'text', x: 180, y: 56, text: '×1.25', base: false },
+      { kind: 'text', x: 180, y: 56, text: '高一档', base: false },
     ],
   },
   // New, old, old, new — the ABBA confirmation.
@@ -24,18 +25,18 @@ const DIAGRAMS = {
       { kind: 'pill', x: 66, y: 30, text: '旧', strong: false },
       { kind: 'pill', x: 110, y: 30, text: '旧', strong: false },
       { kind: 'pill', x: 154, y: 30, text: '新', strong: true },
-      { kind: 'text', x: 100, y: 58, text: '两次新档都在同一位置上下对比', base: false },
+      { kind: 'text', x: 100, y: 58, text: '每一对都是新档与旧档各一轮', base: false },
     ],
   },
-  // Stair-step narrowing: 1.25 → 1.12 → 1.06. Each row declares its own
-  // bar rectangle and a label baseline that sits in the clear gap above the
-  // next row, so the text can never land on the bar below it.
+  // Stair-step narrowing: each rung halves the hand movement. Each row declares
+  // its own bar rectangle and a label baseline that sits in the clear gap above
+  // the next row, so the text can never land on the bar below it.
   narrow: {
     label: '步长依次收紧',
     rows: [
-      { x: 34, y: 14, w: 132, h: 10, label: '×1.25', labelY: 38 },
-      { x: 50, y: 46, w: 100, h: 10, label: '×1.12', labelY: 70 },
-      { x: 66, y: 78, w: 68, h: 10, label: '×1.06', labelY: 102 },
+      { x: 34, y: 14, w: 132, h: 10, label: '第一档', labelY: 38 },
+      { x: 50, y: 46, w: 100, h: 10, label: '一半', labelY: 70 },
+      { x: 66, y: 78, w: 68, h: 10, label: '再一半', labelY: 102 },
     ],
   },
   // A single accepted upgrade with a threshold gate. The gate sits on the
@@ -139,25 +140,25 @@ const STEPS = [
   {
     key: 'screen',
     title: '先测当前档和左右各一档',
-    body: '从你现在的灵敏度出发，往上、往下各挪一个台阶（乘 1.25）。三档各打一轮，比较平均击杀。',
-    detail: '例如当前是 0.180，这一圈就测 0.144、0.180、0.225。',
+    body: '从你现在的灵敏度出发，往上、往下各挪一格。三档各打一轮，比较平均击杀。',
+    detail: '每一步对应固定的手部移动量，所以灵敏度越高，这一步的比例越小。例如 0.400 上下各一档是 0.388 与 0.413（±3.2%）；0.150 则是 0.125 与 0.180（±20%）。',
   },
   {
     key: 'confirm',
     title: '领先的档位要交错复查',
-    body: '单轮高分可能只是手感好。把领先档和原档交错再打四轮，看两次对比是不是都领先。',
-    detail: '排列按“新—旧—旧—新”和“旧—新—新—旧”交替，抵消先后手带来的影响。',
+    body: `单轮高分可能只是手感好。把领先档和原档交错再打 ${CONFIRM_ROUNDS} 轮，每一对都是新档一轮、旧档一轮。`,
+    detail: '每一对都换一个先后顺序，抵消热身与疲劳带来的偏移；每一对都要新档赢，才算真的领先。',
   },
   {
     key: 'narrow',
     title: '没找到提升就收小台阶',
-    body: '一圈下来没有更稳的档位，就把台阶从 1.25 收到 1.12、再收到 1.06，在附近继续细找。',
+    body: '一圈下来没有更稳的档位，就把每一步的手部移动量收窄一半，在附近继续细找。',
     detail: '收紧到游戏里 0.001 的最小单位也分不出来时，测试结束。',
   },
   {
     key: 'pick',
     title: '只认重复出现的提升',
-    body: '新档位要在两次对比中都领先、平均多击杀 1 个以上，才会替换基准；否则保留原档位。',
+    body: '新档位要在每一对对比中都领先、平均多击杀 1 个以上，才会替换基准；否则保留原档位。',
     detail: '宁可不换，也不换一个只赢过一次的档位。',
   },
 ]
@@ -169,7 +170,6 @@ export default function ExplainSection() {
   return (
     <section className="explain" ref={ref} data-revealed={shown} aria-labelledby="explain-title">
       <h2 id="explain-title">它是怎么找到合适灵敏度的</h2>
-      <p className="explain-lede">不需要懂任何公式，跟着打几轮靶场就行。</p>
 
       <ol className="explain-steps">
         {STEPS.map((step, index) => {
@@ -199,8 +199,6 @@ export default function ExplainSection() {
           )
         })}
       </ol>
-
-      <p className="explain-foot">每一步都会自动保存，中途关掉页面也能接着测。</p>
     </section>
   )
 }
